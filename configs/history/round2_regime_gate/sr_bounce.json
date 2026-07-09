@@ -1,0 +1,22 @@
+{
+  "strategy_params": {
+    "pivot_lookback": 120,
+    "pivot_wing": 2,
+    "touch_tolerance_atr": 0.4,
+    "cluster_tolerance_atr": 0.5,
+    "min_wick_ratio_setup": 0.25,
+    "atr_period": 14,
+    "sl_pad_atr": 0.8,
+    "atr_mult_tp": 2.0
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true
+  },
+  "notes": "รอบ2: allowed_regimes=['volatile'] (จากผลรวม 3TF) min_approvals=4 (wrong_entry 43%) | แก้ค่าในไฟล์นี้แล้วรัน backtest ใหม่ได้เลย ทุก run บันทึก config ลง DB ให้ตามรอยได้",
+  "allowed_regimes": [
+    "volatile"
+  ],
+  "min_approvals": 4
+}

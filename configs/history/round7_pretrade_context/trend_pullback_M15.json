@@ -1,0 +1,36 @@
+{
+  "strategy_params": {
+    "fast_ema": 20,
+    "mid_ema": 50,
+    "slow_ema": 200,
+    "slope_bars": 6,
+    "atr_period": 14,
+    "atr_mult_sl": 1.5,
+    "atr_mult_tp": 3.0
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.0,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": true
+  },
+  "notes": "รอบ2: allowed_regimes=['volatile'] (จากผลรวม 3TF) min_approvals=4 (wrong_entry 35%) | แก้ค่าในไฟล์นี้แล้วรัน backtest ใหม่ได้เลย ทุก run บันทึก config ลง DB ให้ตามรอยได้ | รอบ5: snowball grid เลือก tight_trail exp {'partial_tp_r': None, 'partial_fraction': 0.5, 'move_sl_to_breakeven': True, 'trailing_stop_r': None, 'trailing_activate_r': 1.0, 'remove_tp_when_trailing': False} -> 18.19 (เดิม 11.11)",
+  "allowed_regimes": [
+    "volatile"
+  ],
+  "min_approvals": 4,
+  "risk": {
+    "risk_per_trade_pct": 1.0,
+    "max_daily_loss_pct": 3.0,
+    "max_weekly_loss_pct": 6.0,
+    "max_drawdown_pct": 20.0,
+    "sizing_mode": "vol_scaled"
+  },
+  "strategy_review": {
+    "edge": "ย่อตื้นในเทรนด์ที่ยืนยันแล้ว = ซื้อของถูกในทิศที่ตลาดหนุน + trailing เก็บเทรนด์ยาว",
+    "best_market": "volatile (ADX สูง+ATR สูง) โดยเฉพาะ M30",
+    "avoid_when": "range/low_vol — โดน gate ห้ามเทรดอยู่แล้ว"
+  }
+}

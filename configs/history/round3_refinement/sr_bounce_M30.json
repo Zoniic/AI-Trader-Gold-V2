@@ -1,0 +1,22 @@
+{
+  "strategy_params": {
+    "pivot_lookback": 120,
+    "pivot_wing": 2,
+    "touch_tolerance_atr": 0.3,
+    "cluster_tolerance_atr": 0.5,
+    "min_wick_ratio_setup": 0.25,
+    "atr_period": 14,
+    "sl_pad_atr": 1.0,
+    "atr_mult_tp": 2.0
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true
+  },
+  "notes": "รอบ3 M30: + เอกฉันท์ 5/5 (กัน kill-switch, exp +0.72)",
+  "allowed_regimes": [
+    "volatile"
+  ],
+  "min_approvals": 5
+}

@@ -1,0 +1,39 @@
+{
+  "strategy_params": {
+    "fast": 20,
+    "slow": 50,
+    "atr_period": 14,
+    "atr_mult_sl": 1.5,
+    "atr_mult_tp": 3.0
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": null,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": false
+  },
+  "notes": "รอบ2: allowed_regimes=['volatile'] (จากผลรวม 3TF) min_approvals=4 (wrong_entry 34%) | แก้ค่าในไฟล์นี้แล้วรัน backtest ใหม่ได้เลย ทุก run บันทึก config ลง DB ให้ตามรอยได้ | รอบ9 full-devil(WF-guarded): hour_filter exp 7.30->15.90",
+  "allowed_regimes": [
+    "volatile"
+  ],
+  "blocked_hours": [
+    19,
+    17,
+    21
+  ],
+  "min_approvals": 4,
+  "risk": {
+    "risk_per_trade_pct": 0.5,
+    "max_daily_loss_pct": 3.0,
+    "max_weekly_loss_pct": 6.0,
+    "max_drawdown_pct": 20.0,
+    "sizing_mode": "vol_scaled"
+  },
+  "strategy_review": {
+    "edge": "จับการเปลี่ยนโมเมนตัมผ่าน EMA cross",
+    "best_market": "volatile H1",
+    "avoid_when": "ตลาดแกว่งแคบ (สัญญาณหลอกถี่)"
+  }
+}

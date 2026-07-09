@@ -1,0 +1,44 @@
+{
+  "strategy_params": {
+    "bb_period": 20,
+    "bb_std": 2.0,
+    "rsi_period": 14,
+    "rsi_oversold": 30.0,
+    "rsi_overbought": 70.0,
+    "atr_period": 14,
+    "atr_mult_sl": 1.5,
+    "min_tp_atr_mult": 0.3
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.5,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": true,
+    "cooldown_bars_after_loss": 4
+  },
+  "notes": "รอบ2: allowed_regimes=['range'] (จากผลรวม 3TF) min_approvals=4 (wrong_entry 37%) | แก้ค่าในไฟล์นี้แล้วรัน backtest ใหม่ได้เลย ทุก run บันทึก config ลง DB ให้ตามรอยได้ | รอบ5: snowball grid เลือก loose_trail exp {'partial_tp_r': None, 'partial_fraction': 0.5, 'move_sl_to_breakeven': True, 'trailing_stop_r': None, 'trailing_activate_r': 1.0, 'remove_tp_when_trailing': False, 'cooldown_bars_after_loss': 4} -> 7.16 (เดิม 1.42) | รอบ9 full-devil(WF-guarded): hour_filter exp 4.44->7.39",
+  "allowed_regimes": [
+    "range",
+    "low_volatility"
+  ],
+  "blocked_hours": [
+    9,
+    10,
+    19
+  ],
+  "min_approvals": 4,
+  "risk": {
+    "risk_per_trade_pct": 0.5,
+    "max_daily_loss_pct": 3.0,
+    "max_weekly_loss_pct": 6.0,
+    "max_drawdown_pct": 20.0,
+    "sizing_mode": "vol_scaled"
+  },
+  "strategy_review": {
+    "edge": "ราคาที่ยืดเกินกรอบ BB+RSI สุดโต่งมักดีดกลับหาค่าเฉลี่ย",
+    "best_market": "range/เงียบ H1",
+    "avoid_when": "breakout จริง/เทรนด์แรง (กรรมการ+gate คุม)"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "strategy_params": {
+    "asia_start": 1,
+    "asia_end": 8,
+    "trade_start": 9,
+    "trade_end": 13,
+    "min_asia_bars": 6,
+    "max_late_entry_atr": 0.5,
+    "atr_period": 14
+  },
+  "trade_management": {
+    "partial_tp_r": 2.0,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.5,
+    "trailing_activate_r": 2.0,
+    "remove_tp_when_trailing": true
+  },
+  "notes": "รอบ2: allowed_regimes=None (จากผลรวม 3TF) min_approvals=4 (wrong_entry 38%) | runner ชนะ: partial 2R + trail 1.5R ให้ +4435 (exp 13.65 PF 1.21) vs baseline +3196 (exp 9.83) — ดีขึ้นทุก regime | ประวัติ: partial 1R = -2011 (แย่), trailing 1R เพียว = +813 (แย่กว่า baseline)",
+  "allowed_regimes": null,
+  "min_approvals": 4
+}

@@ -1,0 +1,33 @@
+{
+  "strategy_params": {
+    "asia_start": 1,
+    "asia_end": 8,
+    "trade_start": 9,
+    "trade_end": 13,
+    "min_asia_bars": 24,
+    "max_late_entry_atr": 0.5,
+    "breakout_buffer_atr": 0.1,
+    "atr_period": 14
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.0,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": true
+  },
+  "notes": "M15: กรอบเอเชียต้องมี >=24 แท่ง (24x15m=6ชม.) + buffer 0.1 ATR กัน false breakout (21/38 ไม้แพ้ผิดทางทันที)",
+  "risk": {
+    "risk_per_trade_pct": 1.0,
+    "max_daily_loss_pct": 3.0,
+    "max_weekly_loss_pct": 6.0,
+    "max_drawdown_pct": 20.0,
+    "sizing_mode": "vol_scaled"
+  },
+  "strategy_review": {
+    "edge": "สภาพคล่องพุ่งตอน London เปิดดันราคาออกจากกรอบเอเชียแล้ววิ่งต่อ",
+    "best_market": "วันที่ London มีทิศทาง ทุก TF ที่ทดสอบ (H1/M30/M15)",
+    "avoid_when": "วันกรอบเอเชียกว้างผิดปกติ / เข้าช้าหลัง 13:00"
+  }
+}

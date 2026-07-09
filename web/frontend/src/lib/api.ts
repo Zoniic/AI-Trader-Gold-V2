@@ -1,0 +1,206 @@
+import "server-only";
+
+const BACKEND_URL = process.env.BACKEND_URL ?? "http://127.0.0.1:8000";
+
+export type RunSummary = {
+  run_id: string;
+  strategy: string;
+  started_at: string;
+  finished_at: string | null;
+  initial_balance: number | null;
+  final_balance: number | null;
+  total_trades: number | null;
+  win_rate_pct: number | null;
+  profit_factor: number | null;
+  max_drawdown_pct: number | null;
+  expectancy: number | null;
+  halted_at: string | null;
+  halt_reason: string | null;
+  timeframe: string | null;
+  config: string | null;
+};
+
+export type Trade = {
+  id: number;
+  direction: string;
+  entry_time: string;
+  entry: number;
+  sl: number;
+  tp: number;
+  lot: number;
+  exit_time: string;
+  exit_price: number;
+  pnl: number;
+  outcome: string;
+  regime: string | null;
+  discussion: string | null; // JSON ความเห็นนักเทรด 5 คนตอนอนุมัติไม้นี้
+  pnl_r: number | null; // กำไร/ขาดทุนเป็นเท่าของความเสี่ยง (R multiple)
+  mae_r: number | null; // ราคาสวนลึกสุดระหว่างถือ (R)
+  mfe_r: number | null; // ราคาเป็นใจไกลสุดระหว่างถือ (R)
+  post_exit_r: number | null; // หลังชน TP ราคาวิ่งต่ออีกกี่ R
+  review: string | null; // บทวิเคราะห์รายไม้อัตโนมัติ
+};
+
+export type ReviewSummary = {
+  total: number;
+  wins?: number;
+  losses?: number;
+  avg_win_r?: number;
+  avg_loss_r?: number;
+  losses_were_winning_1r?: number;
+  losses_wrong_entry?: number;
+  wins_clean_sl?: number;
+  wins_near_death?: number;
+  tp_hits_with_lookahead?: number;
+  tp_ran_on_1r?: number;
+  recommendations: string[];
+};
+
+export type CommitteeOpinion = {
+  member: string;
+  role: string;
+  approve: boolean;
+  comment: string;
+};
+
+export type RegimeStats = {
+  regime: string;
+  total_trades: number;
+  win_rate_pct: number;
+  profit_factor: number | null;
+  expectancy: number;
+  total_pnl: number;
+};
+
+export type RunDetail = {
+  run: RunSummary;
+  trades: Trade[];
+  rejected_count: number;
+  rejected_reasons: { reason: string; count: number }[];
+  regime_breakdown: RegimeStats[];
+  review_summary: ReviewSummary;
+  config: Record<string, unknown> | null;
+};
+
+export type StrategyInfo = {
+  name: string;
+  description: string;
+  params: Record<string, number | string>;
+  committee: { name: string; role: string }[];
+};
+
+export async function fetchRuns(): Promise<RunSummary[]> {
+  const res = await fetch(`${BACKEND_URL}/runs`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`fetchRuns failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchStrategies(): Promise<StrategyInfo[]> {
+  const res = await fetch(`${BACKEND_URL}/strategies`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`fetchStrategies failed: ${res.status}`);
+  return res.json();
+}
+
+export type LiveTeamStatus = {
+  run_id: string;
+  strategy: string;
+  timeframe: string | null;
+  started_at: string;
+  finished_at: string | null;
+  is_running: boolean;
+  initial_balance: number | null;
+  open_position: Trade | null;
+  closed_trades_today: number;
+  total_pnl: number;
+  recent_trades: Trade[];
+};
+
+export type LiveStatus = {
+  active: boolean;
+  teams: LiveTeamStatus[];
+};
+
+export async function fetchLiveStatus(): Promise<LiveStatus> {
+  const res = await fetch(`${BACKEND_URL}/live/status`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`fetchLiveStatus failed: ${res.status}`);
+  return res.json();
+}
+
+export type RegimeCell = {
+  timeframe: string;
+  regime: string;
+  strategy: string;
+  run_id: string;
+  total_trades: number;
+  win_rate_pct: number;
+  expectancy: number;
+  total_pnl: number;
+  qualified: boolean;
+};
+
+export type RegimeChampion = {
+  timeframe: string;
+  regime: string;
+  champion: string | null;
+  total_pnl?: number;
+  expectancy?: number;
+  win_rate_pct?: number;
+  total_trades?: number;
+  profitable?: boolean;
+  runner_up?: string | null;
+  note: string;
+};
+
+export type RegimeChampionsData = {
+  matrix: RegimeCell[];
+  champions: RegimeChampion[];
+};
+
+export async function fetchRegimeChampions(): Promise<RegimeChampionsData> {
+  const res = await fetch(`${BACKEND_URL}/regime-champions`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`fetchRegimeChampions failed: ${res.status}`);
+  return res.json();
+}
+
+export type PortfolioRow = {
+  multiplier: number;
+  final_balance: number;
+  max_drawdown_pct: number;
+  avg_monthly_return_pct: number;
+  worst_month_pct: number;
+  best_month_pct: number;
+  trades_taken: number;
+  ruined: boolean;
+};
+
+export type PortfolioData = {
+  selections: { strategy: string; timeframe: string; risk_pct: number }[];
+  initial_balance: number;
+  multiplier_comparison: PortfolioRow[];
+  monthly_returns_1x: { month: string; return_pct: number; equity: number }[];
+  error?: string;
+};
+
+export async function fetchPortfolio(): Promise<PortfolioData> {
+  const res = await fetch(`${BACKEND_URL}/portfolio`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`fetchPortfolio failed: ${res.status}`);
+  return res.json();
+}
+
+export type CouncilSection = { focus: string; findings: string[] };
+export type CouncilData = Record<string, CouncilSection>;
+
+export async function fetchCouncil(): Promise<CouncilData> {
+  const res = await fetch(`${BACKEND_URL}/council`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`fetchCouncil failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchRunDetail(runId: string): Promise<RunDetail | null> {
+  const res = await fetch(`${BACKEND_URL}/runs/${encodeURIComponent(runId)}`, {
+    cache: "no-store",
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`fetchRunDetail failed: ${res.status}`);
+  return res.json();
+}

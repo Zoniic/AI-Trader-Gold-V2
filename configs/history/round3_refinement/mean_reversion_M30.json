@@ -1,0 +1,22 @@
+{
+  "strategy_params": {
+    "bb_period": 20,
+    "bb_std": 2.0,
+    "rsi_period": 14,
+    "rsi_oversold": 25.0,
+    "rsi_overbought": 75.0,
+    "atr_period": 14,
+    "atr_mult_sl": 1.5,
+    "min_tp_atr_mult": 0.3
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true
+  },
+  "notes": "⚠ walk-forward: ไม่ผ่าน (2/5 fold) — น่าจะ overfit ห้ามใช้เกิน backtest | รอบ3 M30: RSI เข้มขึ้น 25/75 พลิกบวก (+3.04 PF 1.04) — H1 ใช้ 30/70 เดิมที่ +5.65",
+  "allowed_regimes": [
+    "range"
+  ],
+  "min_approvals": 4
+}

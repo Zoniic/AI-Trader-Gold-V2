@@ -1,0 +1,44 @@
+{
+  "strategy_params": {
+    "vwap_window": 24,
+    "std_window": 48,
+    "z_entry": 2.5,
+    "rsi_buy_max": 40.0,
+    "rsi_sell_min": 60.0,
+    "atr_period": 14,
+    "atr_mult_sl": 1.5,
+    "min_tp_atr_mult": 0.3
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.0,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": true,
+    "cooldown_bars_after_loss": 6
+  },
+  "notes": "รอบ3: z_entry 2.5 (H1 -5.96→-1.08 ยังลบ) เอกฉันท์ทดลองแล้วแย่กว่า — ทีมนี้ candidate rework/พักถาวร | รอบ2: allowed_regimes=['range'] (จากผลรวม 3TF) min_approvals=4 (wrong_entry 46%) | เปิด partial TP 1R + BE ตามระบบรีวิว (สัดส่วนไม้แพ้ที่เคยกำไร>=1R สูง) | รอบ5: snowball grid เลือก tight_trail exp {'partial_tp_r': 1.0, 'partial_fraction': 0.5, 'move_sl_to_breakeven': True, 'trailing_stop_r': None, 'trailing_activate_r': 1.0, 'remove_tp_when_trailing': False, 'cooldown_bars_after_loss': 6} -> 2.92 (เดิม 0.16) | รอบ9 full-devil(WF-guarded): hour_filter exp 1.81->4.03",
+  "allowed_regimes": [
+    "range",
+    "low_volatility"
+  ],
+  "blocked_hours": [
+    1,
+    12,
+    10
+  ],
+  "min_approvals": 4,
+  "risk": {
+    "risk_per_trade_pct": 0.25,
+    "max_daily_loss_pct": 3.0,
+    "max_weekly_loss_pct": 6.0,
+    "max_drawdown_pct": 20.0,
+    "sizing_mode": "vol_scaled"
+  },
+  "strategy_review": {
+    "edge": "ราคาเบี่ยงจากต้นทุนเฉลี่ยตลาด >2σ มักถูกดูดกลับ",
+    "best_market": "ยังไม่พบ TF ที่บวกจริง — ทีมทดลอง",
+    "avoid_when": "ทุกสภาวะจนกว่าจะพิสูจน์ได้ (risk 0.25% เท่านั้น)"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "strategy_params": {
+    "k": 0.6,
+    "atr_period": 14,
+    "atr_mult_sl": 1.2,
+    "atr_mult_tp": 2.4,
+    "min_prev_day_bars": 12
+  },
+  "trade_management": {
+    "partial_tp_r": 1.0,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true
+  },
+  "notes": "รอบ2: allowed_regimes=['volatile'] (จากผลรวม 3TF) min_approvals=4 (wrong_entry 39%) | เปิด partial TP 1R + BE ตามระบบรีวิว (สัดส่วนไม้แพ้ที่เคยกำไร>=1R สูง)",
+  "allowed_regimes": [
+    "volatile"
+  ],
+  "min_approvals": 4
+}

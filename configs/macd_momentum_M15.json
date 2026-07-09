@@ -1,0 +1,37 @@
+{
+  "strategy_params": {
+    "fast": 12,
+    "slow": 26,
+    "signal_period": 9,
+    "trend_ema": 200,
+    "atr_period": 14,
+    "atr_mult_sl": 1.5,
+    "atr_mult_tp": 3.0
+  },
+  "trade_management": {
+    "partial_tp_r": 2.0,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.5,
+    "trailing_activate_r": 2.0,
+    "remove_tp_when_trailing": true
+  },
+  "notes": "รอบ2: allowed_regimes=['volatile'] (จากผลรวม 3TF) min_approvals=4 (wrong_entry 45%) | เปิด partial TP 1R + BE ตามระบบรีวิว (สัดส่วนไม้แพ้ที่เคยกำไร>=1R สูง) | รอบ5: snowball grid เลือก partial2_trail15 exp {'partial_tp_r': 1.0, 'partial_fraction': 0.5, 'move_sl_to_breakeven': True, 'trailing_stop_r': None, 'trailing_activate_r': 1.0, 'remove_tp_when_trailing': False} -> -2.87 (เดิม -4.38) | รอบ10: re-validate บนข้อมูล M15 เต็ม 2.5ปี (เดิมมีแค่ 12 เดือน) exp=3.57 WF=100% กำไร",
+  "allowed_regimes": [
+    "volatile"
+  ],
+  "blocked_hours": null,
+  "min_approvals": 5,
+  "risk": {
+    "risk_per_trade_pct": 0.5,
+    "max_daily_loss_pct": 3.0,
+    "max_weekly_loss_pct": 6.0,
+    "max_drawdown_pct": 20.0,
+    "sizing_mode": "vol_scaled"
+  },
+  "strategy_review": {
+    "edge": "histogram พลิกข้าง = โมเมนตัมเพิ่งเปลี่ยน เข้าเร็วกว่ารอ cross เต็ม",
+    "best_market": "volatile H1",
+    "avoid_when": "RSI สุดโต่งแล้ว (ไล่ดอย)"
+  }
+}

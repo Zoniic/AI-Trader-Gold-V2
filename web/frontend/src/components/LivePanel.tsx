@@ -1,0 +1,97 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import type { LiveStatus } from "@/lib/api";
+
+const LIVE_POLL_MS = 7000; // poll ทุก 5-10 วิ ตามที่ตกลง
+
+function fmtMoney(n: number): string {
+  return `$${n.toFixed(2)}`;
+}
+
+export function LivePanel() {
+  const [status, setStatus] = useState<LiveStatus | null>(null);
+  const [error, setError] = useState<string>("");
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/live/status");
+      if (!res.ok) throw new Error(`โหลดสถานะ live ไม่สำเร็จ (${res.status})`);
+      const data: LiveStatus = await res.json();
+      setStatus(data);
+      setError("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "โหลดข้อมูลไม่สำเร็จ");
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, LIVE_POLL_MS);
+    return () => clearInterval(interval);
+  }, [load]);
+
+  if (error) {
+    return (
+      <div className="mb-6 rounded-xl border border-loss/40 bg-loss/10 px-4 py-3 text-sm text-loss">
+        {error}
+      </div>
+    );
+  }
+
+  if (!status || !status.active) {
+    return (
+      <div className="mb-6 rounded-xl border border-border bg-surface px-4 py-3 text-sm text-muted">
+        🔴 ไม่มี live/paper runner ทำงานอยู่ตอนนี้ — สั่งรันด้วย{" "}
+        <code className="text-foreground">python -m execution.live_runner</code>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-6 rounded-xl border border-border bg-surface p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-profit opacity-75" />
+          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-profit" />
+        </span>
+        <h2 className="text-sm font-medium text-foreground">
+          🟢 Live Paper Trading — อัปเดตทุก {LIVE_POLL_MS / 1000} วินาที
+        </h2>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {status.teams.map((t) => (
+          <div
+            key={t.run_id}
+            className="rounded-lg border border-border bg-background px-3 py-2.5"
+          >
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-sm font-medium text-foreground">
+                {t.strategy}:{t.timeframe}
+              </span>
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  t.is_running ? "bg-profit" : "bg-muted"
+                }`}
+                title={t.is_running ? "กำลังรัน" : "หยุดแล้ว"}
+              />
+            </div>
+            {t.open_position ? (
+              <div className="text-xs text-accent">
+                🔵 เปิดไม้ {t.open_position.direction} @ {t.open_position.entry}
+              </div>
+            ) : (
+              <div className="text-xs text-muted">ไม่มีไม้เปิดอยู่</div>
+            )}
+            <div className="mt-1 flex justify-between text-xs">
+              <span className="text-muted">วันนี้ {t.closed_trades_today} ไม้</span>
+              <span className={t.total_pnl >= 0 ? "text-profit" : "text-loss"}>
+                {fmtMoney(t.total_pnl)}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

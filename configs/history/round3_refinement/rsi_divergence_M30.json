@@ -1,0 +1,22 @@
+{
+  "strategy_params": {
+    "rsi_period": 14,
+    "pivot_wing": 2,
+    "max_pivot_age": 8,
+    "min_rsi_gap": 3.0,
+    "lookback_bars": 70,
+    "atr_period": 14,
+    "sl_pad_atr": 0.5,
+    "rr_multiple": 2.0
+  },
+  "trade_management": {
+    "partial_tp_r": 1.0,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true
+  },
+  "notes": "⚠ walk-forward: pooled ติดลบ (-630, PF 0.93) แม้ 3/5 fold บวก — ยังไม่น่าเชื่อถือ ห้ามใช้เกิน backtest | รอบ3 M30: divergence ต้องชัดขึ้น (gap 3.0, สดภายใน 8 แท่ง) พลิก -17→+5.78",
+  "allowed_regimes": [
+    "range"
+  ],
+  "min_approvals": 4
+}

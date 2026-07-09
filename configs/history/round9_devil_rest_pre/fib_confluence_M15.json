@@ -1,0 +1,41 @@
+{
+  "strategy_params": {
+    "swing_order": 3,
+    "higher_scale_order": 8,
+    "ema_fast": 50,
+    "ema_slow": 200,
+    "rsi_period": 14,
+    "adx_threshold": 20.0,
+    "zone_atr_mult": 0.25,
+    "atr_period": 14,
+    "confidence_threshold": 75.0,
+    "confirm_max_bars": 3,
+    "sl_mode": "structure",
+    "atr_mult_sl": 1.5,
+    "sl_buffer_atr": 0.15,
+    "volume_lookback": 20
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.4,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.5,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": true
+  },
+  "notes": "ที่ M15 ทีมนี้แข็งสุด (PF 1.365, exp 23.85) — gate ออกเฉพาะ low_volatility (PF 0.927, มีแค่ 7 ไม้ ตัวอย่างน้อยเกินเชื่อถือได้ และติดลบ)",
+  "allowed_regimes": ["range", "volatile", "trend"],
+  "min_approvals": 4,
+  "risk": {
+    "risk_per_trade_pct": 0.25,
+    "max_daily_loss_pct": 3.0,
+    "max_weekly_loss_pct": 6.0,
+    "max_drawdown_pct": 20.0,
+    "sizing_mode": "vol_scaled"
+  },
+  "strategy_review": {
+    "edge": "Fibonacci retracement เป็นโซนปฏิกิริยา ไม่ใช่สัญญาณเดี่ยว — เข้าเมื่อ HH/HL หรือ LH/LL ยืนยัน + ราคาเข้าโซน fib + price action confirm + confluence score ผ่านเกณฑ์เท่านั้น",
+    "best_market": "M15 คือ TF ที่ทีมนี้ทำงานดีที่สุด (PF 1.365) โดยเฉพาะ range (PF 2.14)",
+    "avoid_when": "low_volatility ที่ M15 (PF 0.93 ตัวอย่างน้อย 7 ไม้) — ตัดขอบเขตออกจากสเปกเต็มเหมือนกัน (ไม่มี Order Block/FVG/Liquidity Sweep, ไม่มี multi-timeframe จริง, ไม่มี news filter)"
+  }
+}

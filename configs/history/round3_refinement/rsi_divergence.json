@@ -1,0 +1,22 @@
+{
+  "strategy_params": {
+    "rsi_period": 14,
+    "pivot_wing": 2,
+    "max_pivot_age": 12,
+    "min_rsi_gap": 2.0,
+    "lookback_bars": 70,
+    "atr_period": 14,
+    "sl_pad_atr": 0.5,
+    "rr_multiple": 2.0
+  },
+  "trade_management": {
+    "partial_tp_r": 1.0,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true
+  },
+  "notes": "รอบ2: allowed_regimes=['range'] (จากผลรวม 3TF) min_approvals=4 (wrong_entry 48%) | เปิด partial TP 1R + BE ตามระบบรีวิว (สัดส่วนไม้แพ้ที่เคยกำไร>=1R สูง)",
+  "allowed_regimes": [
+    "range"
+  ],
+  "min_approvals": 4
+}

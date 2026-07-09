@@ -1,0 +1,43 @@
+{
+  "strategy_params": {
+    "rsi_period": 14,
+    "pivot_wing": 2,
+    "max_pivot_age": 12,
+    "min_rsi_gap": 2.0,
+    "lookback_bars": 70,
+    "atr_period": 14,
+    "sl_pad_atr": 0.5,
+    "rr_multiple": 2.0
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.5,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": true
+  },
+  "notes": "รอบ2: allowed_regimes=['range'] (จากผลรวม 3TF) min_approvals=4 (wrong_entry 48%) | เปิด partial TP 1R + BE ตามระบบรีวิว (สัดส่วนไม้แพ้ที่เคยกำไร>=1R สูง) | รอบ5: snowball grid เลือก loose_trail exp {'partial_tp_r': 1.0, 'partial_fraction': 0.5, 'move_sl_to_breakeven': True, 'trailing_stop_r': None, 'trailing_activate_r': 1.0, 'remove_tp_when_trailing': False} -> 16.67 (เดิม 5.44) | รอบ9 full-devil(WF-guarded): hour_filter exp 13.88->17.17",
+  "allowed_regimes": [
+    "range",
+    "low_volatility"
+  ],
+  "blocked_hours": [
+    2,
+    11,
+    14
+  ],
+  "min_approvals": 4,
+  "risk": {
+    "risk_per_trade_pct": 0.5,
+    "max_daily_loss_pct": 3.0,
+    "max_weekly_loss_pct": 6.0,
+    "max_drawdown_pct": 20.0,
+    "sizing_mode": "vol_scaled"
+  },
+  "strategy_review": {
+    "edge": "ราคาทำ low ใหม่แต่ RSI ไม่ตาม = แรงขายอ่อนล้า จุดกลับตัวใหญ่",
+    "best_market": "range M15/H1",
+    "avoid_when": "เทรนด์แรง ADX>35"
+  }
+}

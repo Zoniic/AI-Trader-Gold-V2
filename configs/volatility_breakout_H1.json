@@ -1,0 +1,39 @@
+{
+  "strategy_params": {
+    "k": 0.7,
+    "atr_period": 14,
+    "atr_mult_sl": 1.2,
+    "atr_mult_tp": 2.4,
+    "min_prev_day_bars": 12
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.5,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": true
+  },
+  "notes": "รอบ3: k 0.6→0.7 + เอกฉันท์ 5/5 (M30 -1.14→+0.70 เกือบ BE) | รอบ2: allowed_regimes=['volatile'] (จากผลรวม 3TF) min_approvals=4 (wrong_entry 39%) | เปิด partial TP 1R + BE ตามระบบรีวิว (สัดส่วนไม้แพ้ที่เคยกำไร>=1R สูง) | รอบ5: snowball grid เลือก loose_trail exp {'partial_tp_r': 1.0, 'partial_fraction': 0.5, 'move_sl_to_breakeven': True, 'trailing_stop_r': None, 'trailing_activate_r': 1.0, 'remove_tp_when_trailing': False} -> 7.09 (เดิม 2.83) | รอบ8 hour-filter: block ชม.[8, 18, 19] (แพ้ซ้ำๆ) ผ่าน walk-forward guard (WF ไม่ลด, exp ดีขึ้น)",
+  "allowed_regimes": [
+    "volatile"
+  ],
+  "blocked_hours": [
+    8,
+    18,
+    19
+  ],
+  "min_approvals": 5,
+  "risk": {
+    "risk_per_trade_pct": 0.5,
+    "max_daily_loss_pct": 3.0,
+    "max_weekly_loss_pct": 6.0,
+    "max_drawdown_pct": 20.0,
+    "sizing_mode": "vol_scaled"
+  },
+  "strategy_review": {
+    "edge": "วัน range expansion มักวิ่งต่อทางเดิมจนปิด (Larry Williams)",
+    "best_market": "volatile H1",
+    "avoid_when": "วันเปิด gap ไกล/เมื่อวานนิ่งสนิท"
+  }
+}

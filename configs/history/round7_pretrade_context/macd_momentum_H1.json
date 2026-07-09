@@ -1,0 +1,36 @@
+{
+  "strategy_params": {
+    "fast": 12,
+    "slow": 26,
+    "signal_period": 9,
+    "trend_ema": 200,
+    "atr_period": 14,
+    "atr_mult_sl": 1.5,
+    "atr_mult_tp": 3.0
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.5,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": true
+  },
+  "notes": "รอบ3: partial1R + trail1.5 (exp 2.8→4.48) | รอบ5: snowball grid เลือก loose_trail exp {'partial_tp_r': 1.0, 'partial_fraction': 0.5, 'move_sl_to_breakeven': True, 'trailing_stop_r': 1.5, 'trailing_activate_r': 1.5, 'remove_tp_when_trailing': True} -> 5.97 (เดิม 3.55)",
+  "allowed_regimes": [
+    "volatile"
+  ],
+  "min_approvals": 4,
+  "risk": {
+    "risk_per_trade_pct": 0.5,
+    "max_daily_loss_pct": 3.0,
+    "max_weekly_loss_pct": 6.0,
+    "max_drawdown_pct": 20.0,
+    "sizing_mode": "vol_scaled"
+  },
+  "strategy_review": {
+    "edge": "histogram พลิกข้าง = โมเมนตัมเพิ่งเปลี่ยน เข้าเร็วกว่ารอ cross เต็ม",
+    "best_market": "volatile H1",
+    "avoid_when": "RSI สุดโต่งแล้ว (ไล่ดอย)"
+  }
+}
