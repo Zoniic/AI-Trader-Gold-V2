@@ -14,6 +14,15 @@ import pandas as pd
 if TYPE_CHECKING:
     from backtest.engine import Trade
 
+
+def _connect(db_path: str) -> sqlite3.Connection:
+    """เปิด connection พร้อม timeout ยาว + WAL mode เสมอ — กัน 'database is locked' ตอนมีหลาย
+    connection (live_runner 8 ทีม + dashboard backend) อ่าน/เขียนไฟล์เดียวกันพร้อมกัน"""
+    conn = sqlite3.connect(db_path, timeout=30)
+    conn.execute("PRAGMA busy_timeout=30000")
+    return conn
+
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
     run_id TEXT PRIMARY KEY,
@@ -116,7 +125,13 @@ class RunLogger:
     def __init__(self, db_path: str, run_id: str):
         self.run_id = run_id
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(db_path)
+        # timeout=30 กัน "database is locked" ตอนหลายทีม (คนละ RunLogger คนละ connection)
+        # เขียนพร้อมกัน — WAL mode ให้ writer/reader ทำงานพร้อมกันได้โดยไม่ล็อกทั้งไฟล์เหมือน
+        # journal mode เดิม (DELETE) ซึ่งเคยทำให้ log_trade_open() ตอนเปิดไม้ throw แล้วไม้เปิดจริง
+        # ใน MT5 ไม่มี record ใน DB เลย (exception โดนกลืนใน live_runner.py's broad except)
+        self._conn = sqlite3.connect(db_path, timeout=30)
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA busy_timeout=30000")
         self._conn.executescript(SCHEMA)
         self._conn.commit()
         _migrate_add_regime_column(self._conn)
@@ -215,6 +230,28 @@ class RunLogger:
         self._conn.commit()
         return cur.lastrowid
 
+    def _execute_critical(self, sql: str, params: tuple, retries: int = 5) -> sqlite3.Cursor:
+        """เหมือน self._conn.execute()+commit() ปกติ แต่ retry ด้วย backoff ถ้าเจอ 'database is locked'
+        ใช้เฉพาะจุดที่ห้ามพลาดเด็ดขาด (log_trade_open/log_trade_close) — เพราะนี่คือ record เดียว
+        ที่ยืนยันว่ามีไม้จริงเปิด/ปิดใน MT5 ถ้าเขียนไม่สำเร็จแล้วปล่อยผ่าน = ไม้หายจาก DB ถาวร
+        ทั้งที่ยังเปิด/ปิดอยู่จริงใน broker (busy_timeout=30s ที่ตั้งไว้ตอน connect ควรกันเคสส่วนใหญ่
+        อยู่แล้ว แต่ retry ชั้นนี้กันเคส contention รุนแรงที่ยาวกว่า 30s)
+        """
+        import time
+
+        last_exc: sqlite3.OperationalError | None = None
+        for attempt in range(retries):
+            try:
+                cur = self._conn.execute(sql, params)
+                self._conn.commit()
+                return cur
+            except sqlite3.OperationalError as exc:
+                if "locked" not in str(exc).lower():
+                    raise
+                last_exc = exc
+                time.sleep(0.5 * (attempt + 1))
+        raise last_exc  # type: ignore[misc]
+
     def log_trade_open(
         self,
         signal_id: int,
@@ -231,12 +268,11 @@ class RunLogger:
         """บันทึกไม้ตอนเปิด (exit_time ยังว่าง) — ให้ dashboard เห็นไม้ที่ยังเปิดอยู่แบบ real-time
         แทนที่จะรอให้ไม้ปิดก่อนถึงจะมี record (ต่างจาก log_trade ที่ backtest ใช้ insert ครั้งเดียวตอนปิด)
         """
-        cur = self._conn.execute(
+        cur = self._execute_critical(
             "INSERT INTO trades (run_id, signal_id, direction, entry_time, entry, sl, tp, lot, "
             "ticket, margin_used, regime) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (self.run_id, signal_id, direction, str(entry_time), entry, sl, tp, lot, ticket, margin_used, regime),
         )
-        self._conn.commit()
         return cur.lastrowid
 
     def update_open_trade(self, trade_id: int, current_price: float | None, floating_pnl: float | None) -> None:
@@ -256,12 +292,11 @@ class RunLogger:
         outcome: str,
     ) -> None:
         """ปิด record ไม้ที่เปิดไว้จาก log_trade_open — เติม exit fields ให้ครบ"""
-        self._conn.execute(
+        self._execute_critical(
             "UPDATE trades SET exit_time = ?, exit_price = ?, pnl = ?, outcome = ?, "
             "current_price = NULL, floating_pnl = NULL WHERE id = ?",
             (str(exit_time), exit_price, pnl, outcome, trade_id),
         )
-        self._conn.commit()
 
     def log_order(self, trade_id: int, action: str, success: bool, ticket: int | None = None, message: str = "") -> int:
         cur = self._conn.execute(
@@ -288,7 +323,7 @@ class RunLogger:
 
 def _ensure_schema(db_path: str) -> None:
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = _connect(db_path)
     conn.executescript(SCHEMA)
     conn.commit()
     _migrate_add_regime_column(conn)
@@ -297,14 +332,14 @@ def _ensure_schema(db_path: str) -> None:
 
 def list_runs(db_path: str) -> pd.DataFrame:
     _ensure_schema(db_path)
-    with sqlite3.connect(db_path) as conn:
+    with _connect(db_path) as conn:
         # rowid เป็น tiebreaker กรณีสอง run เริ่มภายในวินาทีเดียวกัน (started_at เท่ากัน)
         return pd.read_sql_query("SELECT * FROM runs ORDER BY started_at DESC, rowid DESC", conn)
 
 
 def get_trades(db_path: str, run_id: str) -> pd.DataFrame:
     """เทรดทั้งหมดของ run พร้อมเหตุผลเข้าไม้ (reason) + ความเห็นคณะกรรมการ (discussion JSON) จาก signal ต้นทาง"""
-    with sqlite3.connect(db_path) as conn:
+    with _connect(db_path) as conn:
         return pd.read_sql_query(
             "SELECT t.*, s.reason, s.discussion FROM trades t "
             "LEFT JOIN signals s ON t.signal_id = s.id "
@@ -320,12 +355,12 @@ def get_decisions(db_path: str, run_id: str, approved: bool | None = None) -> pd
     if approved is not None:
         query += " AND approved = ?"
         params.append(int(approved))
-    with sqlite3.connect(db_path) as conn:
+    with _connect(db_path) as conn:
         return pd.read_sql_query(query, conn, params=params)
 
 
 def get_signals(db_path: str, run_id: str) -> pd.DataFrame:
-    with sqlite3.connect(db_path) as conn:
+    with _connect(db_path) as conn:
         return pd.read_sql_query(
             "SELECT * FROM signals WHERE run_id = ? ORDER BY bar_time", conn, params=(run_id,)
         )

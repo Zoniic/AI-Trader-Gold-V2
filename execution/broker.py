@@ -167,13 +167,22 @@ class MT5Broker:
         return float(self._mt5.account_info().balance)
 
     def calc_margin(self, symbol: str, direction: Direction, lot: float, price: float) -> float | None:
-        """คำนวณ margin ที่ต้องใช้เปิดไม้นี้ (หน่วยเดียวกับ currency บัญชี) — คืน None ถ้าคำนวณไม่ได้"""
+        """คำนวณ margin ที่ต้องใช้เปิดไม้นี้ (หน่วยเดียวกับ currency บัญชี) — คืน None ถ้าคำนวณไม่ได้
+
+        เรียกหลัง send_order() สำเร็จเสมอ — ไม้จริงเปิดไปแล้ว ห้ามให้ error ตรงนี้ (แค่คำนวณ
+        margin เพื่อโชว์ผล) ไปขัดขวางการบันทึกไม้ลง DB (log_trade_open) ที่ตามมา จึงกันด้วย
+        try/except แทนที่จะปล่อยให้ throw ขึ้นไปโดน broad except ใน live_runner.py แล้วทำให้
+        open_trade_id ไม่ถูกตั้งค่า (ไม้เปิดจริงแต่ไม่มี record ใน DB เลย)
+        """
         if self.dry_run or self._mt5 is None:
             return None
-        mt5 = self._mt5
-        order_type = mt5.ORDER_TYPE_BUY if direction == Direction.BUY else mt5.ORDER_TYPE_SELL
-        margin = mt5.order_calc_margin(order_type, symbol, lot, price)
-        return float(margin) if margin is not None else None
+        try:
+            mt5 = self._mt5
+            order_type = mt5.ORDER_TYPE_BUY if direction == Direction.BUY else mt5.ORDER_TYPE_SELL
+            margin = mt5.order_calc_margin(order_type, symbol, lot, price)
+            return float(margin) if margin is not None else None
+        except Exception:
+            return None
 
     def get_position(self, ticket: int):
         """คืน position object ของ MT5 ถ้ายังเปิดอยู่ ไม่งั้นคืน None (ไม้ปิดไปแล้ว)"""
