@@ -128,9 +128,19 @@ export type LiveTeamStatus = {
   recent_trades: Trade[];
 };
 
+export type LivePortfolio = {
+  initial_balance: number;
+  current_balance: number;
+  total_pnl: number;
+  floating_pnl: number;
+  equity_curve: { time: string; balance: number }[];
+  by_team: { strategy: string; timeframe: string | null; pnl: number }[];
+};
+
 export type LiveStatus = {
   active: boolean;
   teams: LiveTeamStatus[];
+  portfolio: LivePortfolio;
 };
 
 export async function fetchLiveStatus(): Promise<LiveStatus> {

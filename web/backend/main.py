@@ -160,7 +160,11 @@ def api_live_status() -> dict:
     runs_df = list_runs(settings.log_db_path)
     live_runs = runs_df[runs_df["run_id"].str.startswith("live_", na=False)]
     if live_runs.empty:
-        return {"active": False, "teams": []}
+        empty_portfolio = {
+            "initial_balance": 0.0, "current_balance": 0.0, "total_pnl": 0.0,
+            "floating_pnl": 0.0, "equity_curve": [], "by_team": [],
+        }
+        return {"active": False, "teams": [], "portfolio": empty_portfolio}
 
     # ทุกครั้งที่ live_runner ถูก restart จะได้ run_id ใหม่ (มี timestamp ต่อท้าย) ของทีมเดิม —
     # เอาแค่ run ล่าสุดต่อ (strategy, timeframe) เพื่อไม่ให้เห็นทีมซ้ำๆ จากการ restart ที่ผ่านมา
@@ -244,8 +248,44 @@ def api_live_status() -> dict:
             "floating_pnl": round(floating_pnl, 2),
             "equity_curve": equity_curve,
             "recent_trades": _sanitize(closed_trades.sort_values("exit_time", ascending=False).head(10)),
+            # เก็บไว้เฉพาะประกอบ portfolio รวมด้านล่าง — ไม่ได้ตั้งใจให้ frontend ใช้ตรงๆ
+            "_closed_trades": closed_trades,
         })
-    return {"active": active_found, "teams": teams}
+
+    # กราฟ equity รวมทั้งพอร์ต — เอาไม้ที่ปิดแล้วของทุกทีมมาเรียงตามเวลาจริง แล้วไล่บวกทีละไม้
+    # (เสมือนเงินทุกทีมอยู่ก้อนเดียวกัน) ต่างจาก equity_curve ต่อทีมที่แยกกันคนละเส้น
+    all_closed = []
+    for t in teams:
+        for _, tr in t["_closed_trades"].iterrows():
+            all_closed.append({"exit_time": tr["exit_time"], "pnl": float(tr["pnl"])})
+    all_closed.sort(key=lambda r: r["exit_time"])
+
+    portfolio_initial = round(sum(float(t["initial_balance"] or 0) for t in teams), 2)
+    portfolio_running = portfolio_initial
+    portfolio_equity_curve = [{"time": "start", "balance": portfolio_initial}]
+    for r in all_closed:
+        portfolio_running += r["pnl"]
+        portfolio_equity_curve.append({"time": str(r["exit_time"]), "balance": round(portfolio_running, 2)})
+
+    portfolio = {
+        "initial_balance": portfolio_initial,
+        "current_balance": round(sum(t["current_balance"] for t in teams), 2),
+        "total_pnl": round(sum(t["total_pnl"] for t in teams), 2),
+        "floating_pnl": round(sum(t["floating_pnl"] for t in teams), 2),
+        "equity_curve": portfolio_equity_curve,
+        "by_team": [
+            {
+                "strategy": t["strategy"],
+                "timeframe": t["timeframe"],
+                "pnl": round(t["total_pnl"] + t["floating_pnl"], 2),
+            }
+            for t in teams
+        ],
+    }
+    for t in teams:
+        del t["_closed_trades"]
+
+    return {"active": active_found, "teams": teams, "portfolio": portfolio}
 
 
 @app.get("/runs/{run_id}")

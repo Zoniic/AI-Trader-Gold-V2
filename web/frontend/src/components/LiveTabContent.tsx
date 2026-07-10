@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { LiveStatus } from "@/lib/api";
 import { LiveTeamCard } from "@/components/LiveTeamCard";
+import { PortfolioEquityChart } from "@/components/PortfolioEquityChart";
+import { TeamPnlBarChart } from "@/components/TeamPnlBarChart";
+import { TickingNumber } from "@/components/TickingNumber";
 
 const LIVE_POLL_MS = 7000;
 
@@ -56,10 +59,39 @@ export function LiveTabContent() {
 
   const runningCount = status.teams.filter((t) => t.is_running).length;
   const openCount = status.teams.filter((t) => t.open_position).length;
-  const totalPnlToday = status.teams.reduce((sum, t) => sum + t.total_pnl + t.floating_pnl, 0);
+  const totalPnlToday = status.portfolio.total_pnl + status.portfolio.floating_pnl;
 
   return (
     <div>
+      {/* ตัวเลขใหญ่ไล่นับ + กราฟรวมพอร์ต — ตอบคำถาม "ตอนนี้เงินรวมเป็นยังไง" ในแวบเดียว
+          แทนที่จะต้องนั่งบวกจากการ์ดทีละใบ */}
+      <div className="mb-4 rounded-xl border border-border bg-surface p-4">
+        <div className="mb-1 text-xs text-muted">กำไร/ขาดทุนรวมทั้งพอร์ต (ทุกทีม รวมไม้ที่ยังเปิดอยู่)</div>
+        <div
+          className={`text-3xl font-semibold tabular-nums ${
+            totalPnlToday >= 0 ? "text-profit" : "text-loss"
+          }`}
+        >
+          <TickingNumber value={totalPnlToday} prefix="$" />
+        </div>
+        <div className="mt-1 text-xs text-muted">
+          Balance รวม{" "}
+          <span className="text-foreground">${status.portfolio.current_balance.toFixed(2)}</span>
+          {" "}จากเงินตั้งต้น ${status.portfolio.initial_balance.toFixed(2)}
+        </div>
+      </div>
+
+      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <div className="mb-1 text-xs text-muted">Equity รวมทั้งพอร์ต (ไม้ที่ปิดแล้วของทุกทีม)</div>
+          <PortfolioEquityChart points={status.portfolio.equity_curve} />
+        </div>
+        <div>
+          <div className="mb-1 text-xs text-muted">กำไร/ขาดทุนแยกตามทีม</div>
+          <TeamPnlBarChart data={status.portfolio.by_team} />
+        </div>
+      </div>
+
       <div className="mb-4 flex flex-wrap items-center gap-4 rounded-xl border border-border bg-surface px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="relative flex h-2.5 w-2.5">
@@ -78,13 +110,6 @@ export function LiveTabContent() {
         </div>
         <div className="text-sm text-muted">
           {openCount > 0 ? `${openCount} ทีมมีไม้เปิดอยู่` : "ไม่มีไม้เปิดอยู่ตอนนี้"}
-        </div>
-        <div className="ml-auto text-sm">
-          <span className="text-muted">กำไร/ขาดทุนรวมวันนี้ (รวมไม้ที่ยังเปิดอยู่): </span>
-          <span className={totalPnlToday >= 0 ? "text-profit" : "text-loss"}>
-            {totalPnlToday >= 0 ? "+" : ""}
-            {totalPnlToday.toFixed(2)}
-          </span>
         </div>
       </div>
 
