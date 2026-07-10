@@ -254,24 +254,33 @@ def api_live_status() -> dict:
 
     # กราฟ equity รวมทั้งพอร์ต — เอาไม้ที่ปิดแล้วของทุกทีมมาเรียงตามเวลาจริง แล้วไล่บวกทีละไม้
     # (เสมือนเงินทุกทีมอยู่ก้อนเดียวกัน) ต่างจาก equity_curve ต่อทีมที่แยกกันคนละเส้น
+    #
+    # สำคัญ: ทุกทีมแชร์บัญชี MT5 เดียวกันจริงๆ (live_runner.py::run() ดึง account_balance()
+    # แค่ครั้งเดียวตอน bootstrap แล้วส่งค่าเดียวกันให้ทุกทีม) ดังนั้น initial_balance ที่เก็บไว้ใน
+    # runs table ของแต่ละทีมคือ "เงินก้อนเดียวกัน" ซ้ำกัน 8 ครั้ง — ห้ามเอามาบวกกัน (จะได้ตัวเลข
+    # พองเกินจริง 8 เท่า) ต้องใช้ค่าเดียว (ทุกทีมค่าเท่ากันอยู่แล้ว เอาตัวแรกที่ไม่ใช่ 0 มาใช้)
     all_closed = []
     for t in teams:
         for _, tr in t["_closed_trades"].iterrows():
             all_closed.append({"exit_time": tr["exit_time"], "pnl": float(tr["pnl"])})
     all_closed.sort(key=lambda r: r["exit_time"])
 
-    portfolio_initial = round(sum(float(t["initial_balance"] or 0) for t in teams), 2)
+    portfolio_initial = round(
+        next((float(t["initial_balance"]) for t in teams if t["initial_balance"]), 0.0), 2
+    )
     portfolio_running = portfolio_initial
     portfolio_equity_curve = [{"time": "start", "balance": portfolio_initial}]
     for r in all_closed:
         portfolio_running += r["pnl"]
         portfolio_equity_curve.append({"time": str(r["exit_time"]), "balance": round(portfolio_running, 2)})
 
+    total_realized = round(sum(t["total_pnl"] for t in teams), 2)
+    total_floating = round(sum(t["floating_pnl"] for t in teams), 2)
     portfolio = {
         "initial_balance": portfolio_initial,
-        "current_balance": round(sum(t["current_balance"] for t in teams), 2),
-        "total_pnl": round(sum(t["total_pnl"] for t in teams), 2),
-        "floating_pnl": round(sum(t["floating_pnl"] for t in teams), 2),
+        "current_balance": round(portfolio_initial + total_realized + total_floating, 2),
+        "total_pnl": total_realized,
+        "floating_pnl": total_floating,
         "equity_curve": portfolio_equity_curve,
         "by_team": [
             {
