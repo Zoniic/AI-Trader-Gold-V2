@@ -162,7 +162,7 @@ def api_live_status() -> dict:
     if live_runs.empty:
         empty_portfolio = {
             "initial_balance": 0.0, "current_balance": 0.0, "total_pnl": 0.0,
-            "floating_pnl": 0.0, "equity_curve": [], "by_team": [],
+            "floating_pnl": 0.0, "equity_curve": [], "pnl_candles": [], "by_team": [],
         }
         return {"active": False, "teams": [], "portfolio": empty_portfolio}
 
@@ -274,6 +274,36 @@ def api_live_status() -> dict:
         portfolio_running += r["pnl"]
         portfolio_equity_curve.append({"time": str(r["exit_time"]), "balance": round(portfolio_running, 2)})
 
+    # แท่งเทียน (OHLC) ของ balance รวมพอร์ต แบ่งตามชั่วโมงที่มีไม้ปิดจริง — ชั่วโมงไหนไม่มีไม้ปิด
+    # ไม่มีแท่ง (ไม่ interpolate) เพราะราคาไม่ได้ขยับต่อเนื่องแบบ tick data ปกติ นี่คือ balance
+    # ที่ขยับเป็นขั้นบันไดตอนไม้ปิดเท่านั้น
+    pnl_candles = []
+    if all_closed:
+        running = portfolio_initial
+        bucket_key = None
+        bucket = None
+        for r in all_closed:
+            hour_key = pd.Timestamp(r["exit_time"]).floor("h")
+            open_before = running
+            running += r["pnl"]
+            if hour_key != bucket_key:
+                if bucket is not None:
+                    pnl_candles.append(bucket)
+                bucket_key = hour_key
+                bucket = {
+                    "time": str(hour_key),
+                    "open": round(open_before, 2),
+                    "high": round(max(open_before, running), 2),
+                    "low": round(min(open_before, running), 2),
+                    "close": round(running, 2),
+                }
+            else:
+                bucket["high"] = round(max(bucket["high"], running), 2)
+                bucket["low"] = round(min(bucket["low"], running), 2)
+                bucket["close"] = round(running, 2)
+        if bucket is not None:
+            pnl_candles.append(bucket)
+
     total_realized = round(sum(t["total_pnl"] for t in teams), 2)
     total_floating = round(sum(t["floating_pnl"] for t in teams), 2)
     portfolio = {
@@ -282,6 +312,7 @@ def api_live_status() -> dict:
         "total_pnl": total_realized,
         "floating_pnl": total_floating,
         "equity_curve": portfolio_equity_curve,
+        "pnl_candles": pnl_candles,
         "by_team": [
             {
                 "strategy": t["strategy"],

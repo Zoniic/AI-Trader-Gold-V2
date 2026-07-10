@@ -6,6 +6,8 @@ import { LiveTeamCard } from "@/components/LiveTeamCard";
 import { PortfolioEquityChart } from "@/components/PortfolioEquityChart";
 import { TeamPnlBarChart } from "@/components/TeamPnlBarChart";
 import { TickingNumber } from "@/components/TickingNumber";
+import { LiveEquitySparkline } from "@/components/LiveEquitySparkline";
+import { PnlCandleChart } from "@/components/PnlCandleChart";
 
 const LIVE_POLL_MS = 7000;
 
@@ -79,6 +81,9 @@ export function LiveTabContent() {
           <span className="text-foreground">${status.portfolio.current_balance.toFixed(2)}</span>
           {" "}จากเงินตั้งต้น ${status.portfolio.initial_balance.toFixed(2)}
         </div>
+        <div className="mt-2 border-t border-border pt-2">
+          <LiveEquitySparkline points={status.portfolio.equity_curve} />
+        </div>
       </div>
 
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -90,6 +95,13 @@ export function LiveTabContent() {
           <div className="mb-1 text-xs text-muted">กำไร/ขาดทุนแยกตามทีม</div>
           <TeamPnlBarChart data={status.portfolio.by_team} />
         </div>
+      </div>
+
+      <div className="mb-4">
+        <div className="mb-1 text-xs text-muted">
+          แท่งเทียน Balance รวมพอร์ต — แบ่งแท่งละ 1 ชั่วโมงตามไม้ที่ปิดจริง
+        </div>
+        <PnlCandleChart candles={status.portfolio.pnl_candles} />
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-4 rounded-xl border border-border bg-surface px-4 py-3">

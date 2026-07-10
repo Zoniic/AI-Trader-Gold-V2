@@ -128,12 +128,21 @@ export type LiveTeamStatus = {
   recent_trades: Trade[];
 };
 
+export type PnlCandle = {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+};
+
 export type LivePortfolio = {
   initial_balance: number;
   current_balance: number;
   total_pnl: number;
   floating_pnl: number;
   equity_curve: { time: string; balance: number }[];
+  pnl_candles: PnlCandle[];
   by_team: { strategy: string; timeframe: string | null; pnl: number }[];
 };
 
