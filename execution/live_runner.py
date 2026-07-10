@@ -27,7 +27,7 @@ from datetime import datetime
 import pandas as pd
 
 from backtest.costs import CostModel
-from backtest.engine import Trade
+from backtest.engine import Trade, TradeManagement
 from backtest.regime import compute_regime
 from core.signal import Direction, MarketData, Signal
 from core.strategy import STRATEGY_REGISTRY, Strategy
@@ -68,6 +68,33 @@ def build_risk_cfg(cfg: dict, account_balance: float) -> RiskConfig:
 
 
 @dataclass
+class ManageState:
+    """สถานะ trailing/partial ของไม้ที่เปิดอยู่ — mirror ตัวแปร local ใน backtest/engine.py::_simulate_trade
+    ทุกจุด เพื่อให้ live เดินตาม logic เดียวกับที่ backtest วัดผลไว้เป๊ะ (ไม่ใช่แค่ fixed SL/TP)
+    """
+
+    direction: Direction
+    entry: float
+    original_sl: float
+    tp: float
+    lot: float
+    current_sl: float = 0.0
+    remaining_lot: float = 0.0
+    partial_done: bool = False
+    trail_active: bool = False
+    trail_moved: bool = False
+    extreme: float = 0.0
+    partial_level: float | None = None
+    trail_dist: float | None = None
+    activate_level: float = 0.0
+
+    def __post_init__(self) -> None:
+        self.current_sl = self.original_sl
+        self.remaining_lot = self.lot
+        self.extreme = self.entry
+
+
+@dataclass
 class LiveTeam:
     team: str
     timeframe: str
@@ -79,9 +106,11 @@ class LiveTeam:
     risk: RiskManager
     risk_cfg: RiskConfig
     logger: RunLogger
+    management: TradeManagement
     open_ticket: int | None = None
     open_signal_id: int | None = None
     open_entry_meta: dict = field(default_factory=dict)
+    manage_state: ManageState | None = None
 
 
 def bootstrap_team(
@@ -116,6 +145,7 @@ def bootstrap_team(
         last_bar_time=df.index[-1],
         state=GateState(balance=account_balance),
         risk=RiskManager(risk_cfg), risk_cfg=risk_cfg, logger=logger,
+        management=TradeManagement(**cfg["trade_management"]),
     )
 
 
@@ -167,6 +197,64 @@ def reconcile_open_position(broker: MT5Broker, lt: LiveTeam, dry_run: bool) -> N
     lt.open_ticket = None
     lt.open_signal_id = None
     lt.open_entry_meta = {}
+    lt.manage_state = None
+
+
+def manage_open_position(broker: MT5Broker, lt: LiveTeam, symbol: str, dry_run: bool) -> None:
+    """ปรับ SL/TP ของไม้ที่เปิดอยู่ตามแท่งที่เพิ่งปิด — mirror _simulate_trade steps 2-4 ใน
+    backtest/engine.py (partial TP แล้วเลื่อน BE, trailing stop) เรียกทุกครั้งที่มีแท่งใหม่ปิดและ
+    ยังมีไม้เปิดอยู่ (ก่อน reconcile จะเช็คว่าไม้ปิดหรือยังในรอบถัดไป)
+
+    หมายเหตุ: SL/TP เดิม (fixed) ที่ฝังไว้ตอนส่ง order จะถูก MT5 จัดการเองระหว่างแท่ง (real-time)
+    ฟังก์ชันนี้แค่ "เลื่อน" SL/TP นั้นตามเงื่อนไข snowball ทุกครั้งที่แท่งใหม่ปิด — ไม่ได้ simulate
+    intrabar exact เหมือน backtest 100% (เพราะ live ใช้ order ของ broker จริง) แต่ให้ผลลัพธ์เชิงพฤติกรรม
+    ตรงกับที่ backtest วัดไว้ (ปรับ SL หลังแท่งปิด เหมือน step 4 ของ _simulate_trade)
+    """
+    if dry_run or lt.open_ticket is None or lt.manage_state is None:
+        return
+    m = lt.manage_state
+    mgmt = lt.management
+    bar = lt.df.iloc[-1]
+    high, low = float(bar["high"]), float(bar["low"])
+    sign = m.direction.sign
+
+    # 2) partial TP (ครั้งเดียว) — mirror _simulate_trade
+    if m.partial_level is not None and not m.partial_done:
+        partial_hit = high >= m.partial_level if sign > 0 else low <= m.partial_level
+        if partial_hit:
+            close_vol = round(m.lot * mgmt.partial_fraction, 2)
+            result = broker.close_position(symbol, lt.open_ticket, volume=close_vol)
+            if result.success:
+                m.remaining_lot = round(m.remaining_lot - close_vol, 2)
+                m.partial_done = True
+                print(f"[live] {lt.team}:{lt.timeframe} partial TP {close_vol} lot @ {m.partial_level} "
+                      f"เหลือ {m.remaining_lot} lot", flush=True)
+                if mgmt.move_sl_to_breakeven:
+                    m.current_sl = m.entry
+                    broker.modify_sl_tp(symbol, lt.open_ticket, sl=m.current_sl)
+            else:
+                print(f"[live] {lt.team}:{lt.timeframe} partial TP ล้มเหลว: {result.message}", flush=True)
+
+    # 4) trailing SL — mirror _simulate_trade (อัปเดตหลังเช็คทางออกทั้งหมดของแท่งนี้)
+    if m.trail_dist is not None:
+        m.extreme = max(m.extreme, high) if sign > 0 else min(m.extreme, low)
+        reached_activation = (m.extreme - m.activate_level) * sign >= 0
+        if reached_activation:
+            was_active = m.trail_active
+            m.trail_active = True
+            candidate_sl = m.extreme - sign * m.trail_dist
+            if (candidate_sl - m.current_sl) * sign > 0:
+                m.current_sl = candidate_sl
+                m.trail_moved = True
+                new_tp = 0.0 if mgmt.remove_tp_when_trailing else None
+                result = broker.modify_sl_tp(symbol, lt.open_ticket, sl=m.current_sl, tp=new_tp)
+                if result.success:
+                    tp_note = " (ลบ TP แล้ว — snowball โหมด)" if new_tp == 0.0 and not was_active else ""
+                    print(f"[live] {lt.team}:{lt.timeframe} trailing SL เลื่อนไป {m.current_sl:.2f}{tp_note}",
+                          flush=True)
+                else:
+                    print(f"[live] {lt.team}:{lt.timeframe} เลื่อน trailing SL ล้มเหลว: {result.message}",
+                          flush=True)
 
 
 def process_bar(broker: MT5Broker, lt: LiveTeam, symbol: str, cost: CostModel, dry_run: bool) -> None:
@@ -226,6 +314,18 @@ def process_bar(broker: MT5Broker, lt: LiveTeam, symbol: str, cost: CostModel, d
         "lot": plan.lot, "direction": signal.direction,
     }
 
+    risk_dist = abs(signal.entry - signal.sl)
+    mgmt = lt.management
+    lt.manage_state = ManageState(
+        direction=signal.direction, entry=signal.entry, original_sl=signal.sl, tp=signal.tp, lot=plan.lot,
+        partial_level=(
+            signal.entry + signal.direction.sign * risk_dist * mgmt.partial_tp_r
+            if mgmt.partial_tp_r is not None else None
+        ),
+        trail_dist=(risk_dist * mgmt.trailing_stop_r if mgmt.trailing_stop_r is not None else None),
+        activate_level=signal.entry + signal.direction.sign * risk_dist * mgmt.trailing_activate_r,
+    )
+
 
 def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> None:
     settings = load_settings()
@@ -259,7 +359,10 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
                 try:
                     reconcile_open_position(broker, lt, dry_run)
                     if poll_new_bar(broker, lt, settings.symbol):
-                        process_bar(broker, lt, settings.symbol, cost, dry_run)
+                        if lt.open_ticket is not None:
+                            manage_open_position(broker, lt, settings.symbol, dry_run)
+                        else:
+                            process_bar(broker, lt, settings.symbol, cost, dry_run)
                 except NotDemoAccountError:
                     raise
                 except Exception as exc:  # ทีมเดียวพังไม่ควรทำให้ทีมอื่นหยุด

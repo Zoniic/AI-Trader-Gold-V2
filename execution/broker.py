@@ -91,13 +91,15 @@ class MT5Broker:
             return OrderResult(success=False, message=f"order_send ล้มเหลว: {result}")
         return OrderResult(success=True, ticket=result.order, message="ok")
 
-    def close_position(self, symbol: str, ticket: int) -> OrderResult:
+    def close_position(self, symbol: str, ticket: int, volume: float | None = None) -> OrderResult:
+        """ปิด position — ถ้าไม่ระบุ volume ปิดทั้งไม้ ถ้าระบุ (< volume เดิม) = ปิดบางส่วน (partial TP)"""
         if not self._connected:
             raise RuntimeError("ยังไม่ได้ connect() สำเร็จ")
         self._assert_demo()
 
         if self.dry_run:
-            print(f"[DRY-RUN] จะปิด position ticket={ticket} {symbol} (ยังไม่ได้ยิงจริง)")
+            print(f"[DRY-RUN] จะปิด position ticket={ticket} {symbol} volume={volume or 'ทั้งหมด'} "
+                  f"(ยังไม่ได้ยิงจริง)")
             return OrderResult(success=True, ticket=ticket, message="dry_run")
 
         mt5 = self._mt5
@@ -105,13 +107,14 @@ class MT5Broker:
         if not positions:
             return OrderResult(success=False, message=f"ไม่พบ position ticket={ticket}")
         pos = positions[0]
+        close_volume = round(min(volume, pos.volume), 2) if volume is not None else pos.volume
         close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
         tick = mt5.symbol_info_tick(symbol)
         price = tick.bid if close_type == mt5.ORDER_TYPE_SELL else tick.ask
         request = {
             "action": mt5.TRADE_ACTION_DEAL,
             "symbol": symbol,
-            "volume": pos.volume,
+            "volume": close_volume,
             "type": close_type,
             "position": pos.ticket,
             "price": price,
@@ -122,6 +125,37 @@ class MT5Broker:
         if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
             return OrderResult(success=False, message=f"order_send (close) ล้มเหลว: {result}")
         return OrderResult(success=True, ticket=result.order, message="ok")
+
+    def modify_sl_tp(
+        self, symbol: str, ticket: int, sl: float | None = None, tp: float | None = None
+    ) -> OrderResult:
+        """แก้ SL/TP ของ position ที่เปิดอยู่ — ใช้สำหรับ trailing stop / เลื่อน SL ไป breakeven /
+        ยกเลิก TP ตอน snowball (ส่ง tp=0.0 เพื่อลบ TP ทิ้ง) ค่าที่ไม่ส่ง (None) = คงค่าเดิมไว้
+        """
+        if not self._connected:
+            raise RuntimeError("ยังไม่ได้ connect() สำเร็จ")
+        self._assert_demo()
+
+        if self.dry_run:
+            print(f"[DRY-RUN] จะแก้ SL/TP ticket={ticket} {symbol} sl={sl} tp={tp} (ยังไม่ได้ยิงจริง)")
+            return OrderResult(success=True, ticket=ticket, message="dry_run")
+
+        mt5 = self._mt5
+        positions = mt5.positions_get(ticket=ticket)
+        if not positions:
+            return OrderResult(success=False, message=f"ไม่พบ position ticket={ticket}")
+        pos = positions[0]
+        request = {
+            "action": mt5.TRADE_ACTION_SLTP,
+            "symbol": symbol,
+            "position": pos.ticket,
+            "sl": sl if sl is not None else pos.sl,
+            "tp": tp if tp is not None else pos.tp,
+        }
+        result = mt5.order_send(request)
+        if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
+            return OrderResult(success=False, message=f"order_send (modify) ล้มเหลว: {result}")
+        return OrderResult(success=True, ticket=ticket, message="ok")
 
     def disconnect(self) -> None:
         if self._connected and self._mt5 is not None:
