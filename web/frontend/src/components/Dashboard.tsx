@@ -12,7 +12,7 @@ import { LeagueTable } from "@/components/LeagueTable";
 import { RegimeChampions } from "@/components/RegimeChampions";
 import { PortfolioSimulator } from "@/components/PortfolioSimulator";
 import { CouncilReport } from "@/components/CouncilReport";
-import { LivePanel } from "@/components/LivePanel";
+import { LiveTabContent } from "@/components/LiveTabContent";
 import type { RunDetail, RunSummary } from "@/lib/api";
 
 const REFRESH_MS = 5000;
@@ -100,22 +100,17 @@ export function Dashboard() {
     return () => clearInterval(interval);
   }, [autoRefresh, loadRuns, loadDetail]);
 
-  // สลับแท็บแล้วเลือก run เริ่มต้นของแท็บนั้นให้อัตโนมัติ ถ้า run ที่เลือกอยู่ไม่ตรงประเภท
+  // สลับไป backtest tab แล้ว selectedRunId เดิมไม่ใช่ backtest run (ไม่ควรเกิดแล้ว เพราะ live tab
+  // ไม่ตั้ง selectedRunId เป็น live run อีกต่อไป แต่กันไว้เผื่อ) — เลือก run แรกของ backtest ให้
   const switchTab = (next: Tab) => {
     setTab(next);
-    const stillValid =
-      next === "backtest" ? !isLiveRun(selectedRunId) : isLiveRun(selectedRunId);
-    if (!stillValid) {
-      const pool = next === "backtest" ? backtestRuns : liveRuns;
-      setSelectedRunId(pool[0]?.run_id ?? "");
+    if (next === "backtest" && isLiveRun(selectedRunId)) {
+      setSelectedRunId(backtestRuns[0]?.run_id ?? "");
       setDetail(null);
     }
   };
 
-  const visibleRuns = tab === "backtest" ? backtestRuns : liveRuns;
-  const detailMatchesTab = detail
-    ? isLiveRun(detail.run.run_id) === (tab === "live")
-    : false;
+  const detailMatchesTab = detail ? !isLiveRun(detail.run.run_id) : false;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -180,45 +175,7 @@ export function Dashboard() {
         </div>
       )}
 
-      {tab === "live" && (
-        <>
-          <LivePanel onSelectRun={jumpToRunDetail} />
-
-          {liveRuns.length > 0 && (
-            <div className="mb-3">
-              <label htmlFor="live-run-select" className="mb-1 block text-sm font-medium text-muted">
-                ดูประวัติย้อนหลังของ run ไหน?
-              </label>
-              <p className="mb-2 text-xs text-muted">
-                เลือกแล้วกราฟ + ตารางเทรดด้านล่างสุดของหน้าจะเปลี่ยนไปตาม run ที่เลือก
-                (ไม่กระทบสถานะ live ด้านบนนี้ ซึ่งอัปเดตสดตลอด)
-              </p>
-              <select
-                id="live-run-select"
-                value={isLiveRun(selectedRunId) ? selectedRunId : ""}
-                onChange={(e) => setSelectedRunId(e.target.value)}
-                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground sm:w-auto"
-              >
-                <option value="" disabled>
-                  เลือก live run
-                </option>
-                {liveRuns.map((r) => (
-                  <option key={r.run_id} value={r.run_id}>
-                    {r.strategy}:{r.timeframe} — เริ่ม {r.started_at}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {liveRuns.length === 0 && (
-            <p className="mb-6 rounded-xl border border-border bg-surface p-4 text-sm text-muted">
-              ยังไม่เคยรัน live_runner เลย — สั่งรันด้วย{" "}
-              <code className="text-foreground">python -m execution.live_runner</code>
-            </p>
-          )}
-        </>
-      )}
+      {tab === "live" && <LiveTabContent />}
 
       {tab === "backtest" && (
         <>
@@ -265,6 +222,7 @@ export function Dashboard() {
         </>
       )}
 
+      {tab === "backtest" && (
       <div ref={detailSectionRef} className="scroll-mt-4">
       {!detail && !error && (
         <p className="text-sm text-muted">กำลังโหลดข้อมูล...</p>
@@ -384,6 +342,7 @@ export function Dashboard() {
         </>
       )}
       </div>
+      )}
     </div>
   );
 }

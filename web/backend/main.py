@@ -199,6 +199,31 @@ def api_live_status() -> dict:
             if open_position is not None:
                 open_position["margin_pct"] = None
 
+        # คำนวณ metric สดจาก trades จริง — live run ไม่มีวัน "จบ" จึงไม่มีทาง finish_run()
+        # มาเติม win_rate/profit_factor/balance ใน runs table ให้ได้ ต้องคิดเองตรงนี้ทุกครั้ง
+        initial_balance = float(run["initial_balance"] or 0)
+        closed_pnls = closed_trades["pnl"].astype(float) if not closed_trades.empty else pd.Series(dtype=float)
+        total_closed = len(closed_pnls)
+        wins = int((closed_pnls > 0).sum())
+        gross_profit = float(closed_pnls[closed_pnls > 0].sum())
+        gross_loss = float(abs(closed_pnls[closed_pnls < 0].sum()))
+        win_rate_pct = round(wins / total_closed * 100, 1) if total_closed else None
+        profit_factor = round(gross_profit / gross_loss, 3) if gross_loss > 0 else (None if gross_profit == 0 else float("inf"))
+        if profit_factor == float("inf"):
+            profit_factor = None  # ยังไม่เคยแพ้เลย — ยังสรุป PF ไม่ได้ (ไม่ใช่ infinity)
+        expectancy = round(float(closed_pnls.mean()), 2) if total_closed else None
+        realized_pnl = round(float(closed_pnls.sum()), 2) if total_closed else 0.0
+        floating_pnl = float(open_position["floating_pnl"]) if open_position and open_position.get("floating_pnl") is not None else 0.0
+        current_balance = round(initial_balance + realized_pnl + floating_pnl, 2)
+
+        # equity curve แบบย่อ (จุดเดียวต่อไม้ที่ปิดแล้ว) ให้ sparkline ในการ์ดใช้ได้เลย ไม่ต้องเรียก /runs/{id} แยก
+        equity_curve = []
+        if total_closed:
+            running = initial_balance
+            for _, tr in closed_trades.sort_values("exit_time").iterrows():
+                running += float(tr["pnl"])
+                equity_curve.append({"time": str(tr["exit_time"]), "balance": round(running, 2)})
+
         teams.append({
             "run_id": run["run_id"],
             "strategy": run["strategy"],
@@ -208,10 +233,17 @@ def api_live_status() -> dict:
             "last_heartbeat": run.get("last_heartbeat"),
             "is_running": is_running,
             "initial_balance": run["initial_balance"],
+            "current_balance": current_balance,
             "open_position": open_position,
+            "total_trades": total_closed,
+            "win_rate_pct": win_rate_pct,
+            "profit_factor": profit_factor,
+            "expectancy": expectancy,
             "closed_trades_today": len(closed_trades),
-            "total_pnl": round(float(closed_trades["pnl"].sum()), 2) if not closed_trades.empty else 0.0,
-            "recent_trades": _sanitize(closed_trades.tail(5)),
+            "total_pnl": realized_pnl,
+            "floating_pnl": round(floating_pnl, 2),
+            "equity_curve": equity_curve,
+            "recent_trades": _sanitize(closed_trades.sort_values("exit_time", ascending=False).head(10)),
         })
     return {"active": active_found, "teams": teams}
 

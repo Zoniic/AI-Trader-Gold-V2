@@ -115,9 +115,16 @@ export type LiveTeamStatus = {
   finished_at: string | null;
   is_running: boolean;
   initial_balance: number | null;
+  current_balance: number; // initial + realized pnl + floating pnl ไม้ที่เปิดอยู่ (คำนวณสด)
   open_position: Trade | null;
+  total_trades: number; // จำนวนไม้ที่ปิดแล้วทั้งหมดของ run นี้ (คำนวณสด ไม่พึ่ง finish_run)
+  win_rate_pct: number | null;
+  profit_factor: number | null;
+  expectancy: number | null;
   closed_trades_today: number;
   total_pnl: number;
+  floating_pnl: number;
+  equity_curve: { time: string; balance: number }[];
   recent_trades: Trade[];
 };
 
