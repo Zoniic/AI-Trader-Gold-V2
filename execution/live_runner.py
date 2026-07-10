@@ -363,7 +363,9 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
                             manage_open_position(broker, lt, settings.symbol, dry_run)
                         else:
                             process_bar(broker, lt, settings.symbol, cost, dry_run)
-                        lt.logger.update_heartbeat()  # อัปเดต heartbeat ทุกครั้งมีแท่งใหม่ปิด
+                    # อัปเดต heartbeat ทุกรอบ poll (ไม่ใช่แค่ตอนมีแท่งใหม่ปิด) — เพื่อให้ dashboard
+                    # รู้ว่า process ยังมีชีวิตอยู่จริง แม้ timeframe ยาว (H1) ที่กว่าแท่งจะปิดใหม่นานเป็นชม.
+                    lt.logger.update_heartbeat()
                 except NotDemoAccountError:
                     raise
                 except Exception as exc:  # ทีมเดียวพังไม่ควรทำให้ทีมอื่นหยุด
