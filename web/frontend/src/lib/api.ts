@@ -28,17 +28,23 @@ export type Trade = {
   sl: number;
   tp: number;
   lot: number;
-  exit_time: string;
-  exit_price: number;
-  pnl: number;
-  outcome: string;
+  exit_time: string | null; // null = ยังเปิดอยู่
+  exit_price: number | null;
+  pnl: number | null;
+  outcome: string | null;
   regime: string | null;
+  reason: string | null; // เหตุผล/confluence ตอนเข้าไม้
   discussion: string | null; // JSON ความเห็นนักเทรด 5 คนตอนอนุมัติไม้นี้
   pnl_r: number | null; // กำไร/ขาดทุนเป็นเท่าของความเสี่ยง (R multiple)
   mae_r: number | null; // ราคาสวนลึกสุดระหว่างถือ (R)
   mfe_r: number | null; // ราคาเป็นใจไกลสุดระหว่างถือ (R)
   post_exit_r: number | null; // หลังชน TP ราคาวิ่งต่ออีกกี่ R
   review: string | null; // บทวิเคราะห์รายไม้อัตโนมัติ
+  ticket: number | null; // MT5 position ticket (null = dry-run)
+  margin_used: number | null; // margin ที่ใช้เปิดไม้นี้ (currency บัญชี)
+  margin_pct: number | null; // margin_used / initial_balance * 100
+  current_price: number | null; // ราคาปัจจุบัน (ไม้ที่ยังเปิดอยู่)
+  floating_pnl: number | null; // กำไร/ขาดทุนลอย (ไม้ที่ยังเปิดอยู่)
 };
 
 export type ReviewSummary = {

@@ -77,8 +77,39 @@ export function LivePanel() {
               />
             </div>
             {t.open_position ? (
-              <div className="text-xs text-accent">
-                🔵 เปิดไม้ {t.open_position.direction} @ {t.open_position.entry}
+              <div className="mb-1 space-y-0.5 rounded-md bg-accent/10 px-2 py-1.5 text-xs text-accent">
+                <div className="font-medium">
+                  🔵 {t.open_position.direction} {t.open_position.lot} lot @ {t.open_position.entry}
+                  {t.open_position.ticket ? ` (ticket ${t.open_position.ticket})` : " (dry-run)"}
+                </div>
+                <div className="text-[11px] text-muted">
+                  เปิดเมื่อ {t.open_position.entry_time}
+                </div>
+                <div className="text-[11px] text-muted">
+                  SL {t.open_position.sl} · TP {t.open_position.tp}
+                </div>
+                {t.open_position.current_price != null && (
+                  <div className="text-[11px] text-muted">
+                    ราคาปัจจุบัน {t.open_position.current_price}
+                    {t.open_position.floating_pnl != null && (
+                      <span className={t.open_position.floating_pnl >= 0 ? " text-profit" : " text-loss"}>
+                        {" "}({t.open_position.floating_pnl >= 0 ? "+" : ""}
+                        {t.open_position.floating_pnl.toFixed(2)})
+                      </span>
+                    )}
+                  </div>
+                )}
+                {t.open_position.margin_used != null && (
+                  <div className="text-[11px] text-muted">
+                    Margin {fmtMoney(t.open_position.margin_used)}
+                    {t.open_position.margin_pct != null && ` (${t.open_position.margin_pct}%)`}
+                  </div>
+                )}
+                {t.open_position.reason && (
+                  <div className="truncate text-[11px] text-muted" title={t.open_position.reason}>
+                    เหตุผล: {t.open_position.reason}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="text-xs text-muted">ไม่มีไม้เปิดอยู่</div>

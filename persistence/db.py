@@ -66,6 +66,10 @@ CREATE TABLE IF NOT EXISTS trades (
     regime TEXT,
     pnl_r REAL, mae_r REAL, mfe_r REAL, post_exit_r REAL,
     review TEXT,
+    ticket INTEGER,
+    margin_used REAL,
+    current_price REAL,
+    floating_pnl REAL,
     created_at TEXT DEFAULT (datetime('now'))
 );
 
@@ -92,6 +96,10 @@ def _migrate_add_regime_column(conn: sqlite3.Connection) -> None:
             "mfe_r": "REAL",
             "post_exit_r": "REAL",
             "review": "TEXT",
+            "ticket": "INTEGER",
+            "margin_used": "REAL",
+            "current_price": "REAL",
+            "floating_pnl": "REAL",
         },
         "signals": {"discussion": "TEXT"},
         "runs": {"timeframe": "TEXT", "config": "TEXT", "last_heartbeat": "TEXT"},
@@ -207,6 +215,54 @@ class RunLogger:
         self._conn.commit()
         return cur.lastrowid
 
+    def log_trade_open(
+        self,
+        signal_id: int,
+        direction: str,
+        entry_time,
+        entry: float,
+        sl: float,
+        tp: float,
+        lot: float,
+        ticket: int | None = None,
+        margin_used: float | None = None,
+        regime: str | None = None,
+    ) -> int:
+        """บันทึกไม้ตอนเปิด (exit_time ยังว่าง) — ให้ dashboard เห็นไม้ที่ยังเปิดอยู่แบบ real-time
+        แทนที่จะรอให้ไม้ปิดก่อนถึงจะมี record (ต่างจาก log_trade ที่ backtest ใช้ insert ครั้งเดียวตอนปิด)
+        """
+        cur = self._conn.execute(
+            "INSERT INTO trades (run_id, signal_id, direction, entry_time, entry, sl, tp, lot, "
+            "ticket, margin_used, regime) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (self.run_id, signal_id, direction, str(entry_time), entry, sl, tp, lot, ticket, margin_used, regime),
+        )
+        self._conn.commit()
+        return cur.lastrowid
+
+    def update_open_trade(self, trade_id: int, current_price: float | None, floating_pnl: float | None) -> None:
+        """อัปเดตราคาปัจจุบัน/กำไรลอยของไม้ที่ยังเปิดอยู่ — เรียกทุกรอบ poll"""
+        self._conn.execute(
+            "UPDATE trades SET current_price = ?, floating_pnl = ? WHERE id = ?",
+            (current_price, floating_pnl, trade_id),
+        )
+        self._conn.commit()
+
+    def log_trade_close(
+        self,
+        trade_id: int,
+        exit_time,
+        exit_price: float,
+        pnl: float,
+        outcome: str,
+    ) -> None:
+        """ปิด record ไม้ที่เปิดไว้จาก log_trade_open — เติม exit fields ให้ครบ"""
+        self._conn.execute(
+            "UPDATE trades SET exit_time = ?, exit_price = ?, pnl = ?, outcome = ?, "
+            "current_price = NULL, floating_pnl = NULL WHERE id = ?",
+            (str(exit_time), exit_price, pnl, outcome, trade_id),
+        )
+        self._conn.commit()
+
     def log_order(self, trade_id: int, action: str, success: bool, ticket: int | None = None, message: str = "") -> int:
         cur = self._conn.execute(
             "INSERT INTO orders (run_id, trade_id, action, success, ticket, message) VALUES (?,?,?,?,?,?)",
@@ -247,12 +303,12 @@ def list_runs(db_path: str) -> pd.DataFrame:
 
 
 def get_trades(db_path: str, run_id: str) -> pd.DataFrame:
-    """เทรดทั้งหมดของ run พร้อมความเห็นคณะกรรมการ (discussion JSON) จาก signal ต้นทาง"""
+    """เทรดทั้งหมดของ run พร้อมเหตุผลเข้าไม้ (reason) + ความเห็นคณะกรรมการ (discussion JSON) จาก signal ต้นทาง"""
     with sqlite3.connect(db_path) as conn:
         return pd.read_sql_query(
-            "SELECT t.*, s.discussion FROM trades t "
+            "SELECT t.*, s.reason, s.discussion FROM trades t "
             "LEFT JOIN signals s ON t.signal_id = s.id "
-            "WHERE t.run_id = ? ORDER BY t.exit_time",
+            "WHERE t.run_id = ? ORDER BY t.entry_time",
             conn,
             params=(run_id,),
         )

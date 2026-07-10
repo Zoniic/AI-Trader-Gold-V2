@@ -185,6 +185,15 @@ def api_live_status() -> dict:
             except (ValueError, TypeError):
                 pass
 
+        open_position = _sanitize(open_trades)[0] if not open_trades.empty else None
+        if open_position is not None and open_position.get("margin_used") and run["initial_balance"]:
+            open_position["margin_pct"] = round(
+                open_position["margin_used"] / float(run["initial_balance"]) * 100, 2
+            )
+        else:
+            if open_position is not None:
+                open_position["margin_pct"] = None
+
         teams.append({
             "run_id": run["run_id"],
             "strategy": run["strategy"],
@@ -194,7 +203,7 @@ def api_live_status() -> dict:
             "last_heartbeat": run.get("last_heartbeat"),
             "is_running": is_running,
             "initial_balance": run["initial_balance"],
-            "open_position": _sanitize(open_trades)[0] if not open_trades.empty else None,
+            "open_position": open_position,
             "closed_trades_today": len(closed_trades),
             "total_pnl": round(float(closed_trades["pnl"].sum()), 2) if not closed_trades.empty else 0.0,
             "recent_trades": _sanitize(closed_trades.tail(5)),

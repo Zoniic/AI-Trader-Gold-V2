@@ -74,9 +74,13 @@ export function TradeTable({ trades }: { trades: Trade[] }) {
     );
   }
 
-  const sorted = [...trades].sort(
-    (a, b) => new Date(b.exit_time).getTime() - new Date(a.exit_time).getTime()
-  );
+  // ไม้ที่ยังเปิดอยู่ (exit_time ว่าง) เรียงไว้บนสุดเสมอ ที่เหลือเรียงตามเวลาปิดล่าสุด
+  const sorted = [...trades].sort((a, b) => {
+    if (a.exit_time == null && b.exit_time == null) return 0;
+    if (a.exit_time == null) return -1;
+    if (b.exit_time == null) return 1;
+    return new Date(b.exit_time).getTime() - new Date(a.exit_time).getTime();
+  });
 
   return (
     <div className="max-h-96 overflow-auto rounded-xl border border-border bg-surface">
@@ -113,18 +117,19 @@ export function TradeTable({ trades }: { trades: Trade[] }) {
               <td className="px-3 py-2 text-muted">{fmt(t.tp)}</td>
               <td className="px-3 py-2 text-muted">{fmt(t.lot)}</td>
               <td className="px-3 py-2 text-muted">
-                {new Date(t.exit_time).toLocaleString("th-TH", {
-                  dateStyle: "short",
-                  timeStyle: "short",
-                })}
+                {t.exit_time
+                  ? new Date(t.exit_time).toLocaleString("th-TH", {
+                      dateStyle: "short",
+                      timeStyle: "short",
+                    })
+                  : <span className="text-accent">ยังเปิดอยู่</span>}
               </td>
               <td
                 className={`px-3 py-2 font-medium ${
-                  t.pnl >= 0 ? "text-profit" : "text-loss"
+                  t.pnl == null ? "text-muted" : t.pnl >= 0 ? "text-profit" : "text-loss"
                 }`}
               >
-                {t.pnl >= 0 ? "+" : ""}
-                {fmt(t.pnl)}
+                {t.pnl == null ? "-" : `${t.pnl >= 0 ? "+" : ""}${fmt(t.pnl)}`}
               </td>
               <td
                 className={`px-3 py-2 font-medium ${
@@ -133,7 +138,7 @@ export function TradeTable({ trades }: { trades: Trade[] }) {
               >
                 {t.pnl_r !== null ? `${t.pnl_r >= 0 ? "+" : ""}${t.pnl_r.toFixed(2)}R` : "-"}
               </td>
-              <td className="px-3 py-2 text-muted">{t.outcome}</td>
+              <td className="px-3 py-2 text-muted">{t.outcome ?? "-"}</td>
               <td className="px-3 py-2 text-muted">{t.regime ?? "-"}</td>
               <td className="px-3 py-2">
                 <AnalysisCell raw={t.discussion} review={t.review} />

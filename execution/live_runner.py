@@ -111,6 +111,7 @@ class LiveTeam:
     open_signal_id: int | None = None
     open_entry_meta: dict = field(default_factory=dict)
     manage_state: ManageState | None = None
+    open_trade_id: int | None = None
 
 
 def bootstrap_team(
@@ -169,13 +170,17 @@ def poll_new_bar(broker: MT5Broker, lt: LiveTeam, symbol: str, lookback: int = 8
 
 
 def reconcile_open_position(broker: MT5Broker, lt: LiveTeam, dry_run: bool) -> None:
-    """เช็ค position ที่เปิดค้างไว้ ถ้าปิดไปแล้ว (โดน SL/TP จริงใน MT5) ดึง pnl มาอัปเดต state + log"""
+    """เช็ค position ที่เปิดค้างไว้ ถ้ายังเปิดอยู่ อัปเดตราคาปัจจุบัน/กำไรลอย
+    ถ้าปิดไปแล้ว (โดน SL/TP จริงใน MT5) ดึง pnl มาอัปเดต state + log
+    """
     if lt.open_ticket is None:
         return
     if dry_run:
         return  # dry_run ไม่มี ticket จริงใน MT5 ให้เช็ค
     pos = broker.get_position(lt.open_ticket)
     if pos is not None:
+        if lt.open_trade_id is not None:
+            lt.logger.update_open_trade(lt.open_trade_id, float(pos.price_current), float(pos.profit))
         return  # ยังเปิดอยู่
     pnl = broker.get_closed_deal_pnl(lt.open_ticket)
     if pnl is None:
@@ -183,14 +188,11 @@ def reconcile_open_position(broker: MT5Broker, lt: LiveTeam, dry_run: bool) -> N
     exit_idx = len(lt.df) - 1
     meta = lt.open_entry_meta
     outcome = "tp" if pnl >= 0 else "sl"  # ประมาณจากผลจริง (ไม่รู้ว่าโดน SL/TP เป๊ะจาก deal เดียว)
-    trade = Trade(
-        direction=meta["direction"], entry_time=lt.df.index[meta["entry_idx"]], entry=meta["entry"],
-        sl=meta["sl"], tp=meta.get("tp", meta["sl"]), lot=meta.get("lot", 0.0),
-        exit_time=lt.df.index[exit_idx], exit_price=meta.get("entry", 0.0), pnl=pnl, outcome=outcome,
-        regime="", review="ปิดจาก MT5 จริง (SL/TP ของ broker) — ไม่ได้ simulate",
-    )
-    if lt.open_signal_id is not None:
-        lt.logger.log_trade(lt.open_signal_id, trade)
+    if lt.open_trade_id is not None:
+        lt.logger.log_trade_close(
+            lt.open_trade_id, exit_time=lt.df.index[exit_idx], exit_price=meta.get("entry", 0.0),
+            pnl=pnl, outcome=outcome,
+        )
     on_trade_closed(lt.state, pnl, exit_idx, lt.cfg.get("trade_management", {}).get("cooldown_bars_after_loss", 0))
     print(f"[live] {lt.team}:{lt.timeframe} ไม้ ticket={lt.open_ticket} ปิดแล้ว pnl={pnl:.2f} "
           f"balance={lt.state.balance:.2f}", flush=True)
@@ -198,6 +200,7 @@ def reconcile_open_position(broker: MT5Broker, lt: LiveTeam, dry_run: bool) -> N
     lt.open_signal_id = None
     lt.open_entry_meta = {}
     lt.manage_state = None
+    lt.open_trade_id = None
 
 
 def manage_open_position(broker: MT5Broker, lt: LiveTeam, symbol: str, dry_run: bool) -> None:
@@ -313,6 +316,12 @@ def process_bar(broker: MT5Broker, lt: LiveTeam, symbol: str, cost: CostModel, d
         "entry_idx": idx, "entry": signal.entry, "sl": signal.sl, "tp": signal.tp,
         "lot": plan.lot, "direction": signal.direction,
     }
+    margin_used = broker.calc_margin(symbol, signal.direction, plan.lot, signal.entry)
+    lt.open_trade_id = lt.logger.log_trade_open(
+        signal_id=signal_id, direction=signal.direction.value, entry_time=bar_time,
+        entry=signal.entry, sl=signal.sl, tp=signal.tp, lot=plan.lot,
+        ticket=result.ticket, margin_used=margin_used, regime=str(regime_series.iloc[idx]),
+    )
 
     risk_dist = abs(signal.entry - signal.sl)
     mgmt = lt.management

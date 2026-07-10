@@ -18,17 +18,19 @@ export function EquityChart({
   trades: Trade[];
   initialBalance: number;
 }) {
-  const sorted = [...trades].sort(
-    (a, b) => new Date(a.exit_time).getTime() - new Date(b.exit_time).getTime()
+  // ไม้ที่ยังเปิดอยู่ (exit_time ว่าง) ไม่นับใน equity curve — รอปิดก่อนถึงจะรู้ผลจริง
+  const closed = trades.filter((t) => t.exit_time != null);
+  const sorted = [...closed].sort(
+    (a, b) => new Date(a.exit_time!).getTime() - new Date(b.exit_time!).getTime()
   );
 
   let running = initialBalance;
   const data = [
     { time: "start", balance: initialBalance },
     ...sorted.map((t) => {
-      running += t.pnl;
+      running += t.pnl ?? 0;
       return {
-        time: new Date(t.exit_time).toLocaleString("th-TH", {
+        time: new Date(t.exit_time!).toLocaleString("th-TH", {
           dateStyle: "short",
           timeStyle: "short",
         }),
