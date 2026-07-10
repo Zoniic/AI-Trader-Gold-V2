@@ -154,7 +154,7 @@ def api_live_status() -> dict:
 
     frontend poll endpoint นี้ทุก 5-10 วิ ไม่ต้องมี live_runner รันอยู่ก็เรียกได้ (คืน list ว่าง)
     """
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
 
     settings = load_settings()
     runs_df = list_runs(settings.log_db_path)
@@ -162,7 +162,9 @@ def api_live_status() -> dict:
     if live_runs.empty:
         return {"active": False, "teams": []}
 
-    now = datetime.now()
+    # SQLite datetime('now') คืนค่าเป็น UTC เสมอ — ต้องเทียบกับ UTC เท่านั้น ห้ามใช้ local time
+    # (เครื่องรันอยู่ timezone อื่น เช่น UTC+7 จะทำให้ diff คลาดเคลื่อนหลายชั่วโมง)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     HEARTBEAT_TIMEOUT = timedelta(minutes=3)
     active_found = False
 
