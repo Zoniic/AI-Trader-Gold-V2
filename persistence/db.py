@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS runs (
     strategy TEXT NOT NULL,
     started_at TEXT DEFAULT (datetime('now')),
     finished_at TEXT,
+    last_heartbeat TEXT,
     initial_balance REAL,
     final_balance REAL,
     total_trades INTEGER,
@@ -93,7 +94,7 @@ def _migrate_add_regime_column(conn: sqlite3.Connection) -> None:
             "review": "TEXT",
         },
         "signals": {"discussion": "TEXT"},
-        "runs": {"timeframe": "TEXT", "config": "TEXT"},
+        "runs": {"timeframe": "TEXT", "config": "TEXT", "last_heartbeat": "TEXT"},
     }
     for table, columns in migrations.items():
         existing = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
@@ -213,6 +214,14 @@ class RunLogger:
         )
         self._conn.commit()
         return cur.lastrowid
+
+    def update_heartbeat(self) -> None:
+        """อัปเดตเวลา heartbeat ล่าสุด — เรียกทุกครั้งที่ live_runner poll bar ใหม่"""
+        self._conn.execute(
+            "UPDATE runs SET last_heartbeat = datetime('now') WHERE run_id = ?",
+            (self.run_id,),
+        )
+        self._conn.commit()
 
     def close(self) -> None:
         self._conn.close()

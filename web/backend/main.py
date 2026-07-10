@@ -150,35 +150,54 @@ def api_list_runs() -> list[dict]:
 
 @app.get("/live/status")
 def api_live_status() -> dict:
-    """สถานะ live/paper runner แบบ realtime — อ่านจาก run_id ที่ขึ้นต้น 'live_' เท่านั้น
+    """สถานะ live/paper runner แบบ realtime — เช็ค heartbeat ล่าสุดว่ายังอยู่ (< 3 นาที) หรือตาย
 
     frontend poll endpoint นี้ทุก 5-10 วิ ไม่ต้องมี live_runner รันอยู่ก็เรียกได้ (คืน list ว่าง)
     """
+    from datetime import datetime, timedelta
+
     settings = load_settings()
     runs_df = list_runs(settings.log_db_path)
     live_runs = runs_df[runs_df["run_id"].str.startswith("live_", na=False)]
     if live_runs.empty:
         return {"active": False, "teams": []}
 
+    now = datetime.now()
+    HEARTBEAT_TIMEOUT = timedelta(minutes=3)
+    active_found = False
+
     teams = []
     for _, run in live_runs.iterrows():
         trades_df = get_trades(settings.log_db_path, run["run_id"])
         open_trades = trades_df[trades_df["exit_time"].isna()] if not trades_df.empty else trades_df
         closed_trades = trades_df[trades_df["exit_time"].notna()] if not trades_df.empty else trades_df
+
+        # เช็ค heartbeat: ถ้า last_heartbeat ยังใหม่ (< 3 นาทีที่ผ่านมา) = still running
+        is_running = False
+        if pd.notna(run.get("last_heartbeat")):
+            try:
+                last_hb = pd.to_datetime(run["last_heartbeat"])
+                if now - last_hb < HEARTBEAT_TIMEOUT:
+                    is_running = True
+                    active_found = True
+            except (ValueError, TypeError):
+                pass
+
         teams.append({
             "run_id": run["run_id"],
             "strategy": run["strategy"],
             "timeframe": run["timeframe"],
             "started_at": run["started_at"],
             "finished_at": run["finished_at"],
-            "is_running": pd.isna(run["finished_at"]),
+            "last_heartbeat": run.get("last_heartbeat"),
+            "is_running": is_running,
             "initial_balance": run["initial_balance"],
             "open_position": _sanitize(open_trades)[0] if not open_trades.empty else None,
             "closed_trades_today": len(closed_trades),
             "total_pnl": round(float(closed_trades["pnl"].sum()), 2) if not closed_trades.empty else 0.0,
             "recent_trades": _sanitize(closed_trades.tail(5)),
         })
-    return {"active": True, "teams": teams}
+    return {"active": active_found, "teams": teams}
 
 
 @app.get("/runs/{run_id}")
