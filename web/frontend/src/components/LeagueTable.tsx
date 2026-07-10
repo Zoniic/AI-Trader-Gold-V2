@@ -26,9 +26,12 @@ export function LeagueTable({
 
   return (
     <div className="mb-6">
-      <h2 className="mb-2 text-sm font-medium text-muted">
+      <h2 className="mb-1 text-sm font-medium text-muted">
         🏆 ตารางแข่งขัน (ผลรันล่าสุดของแต่ละทีม เรียงตาม expectancy)
       </h2>
+      <p className="mb-2 text-xs text-muted">
+        คลิกแถวเพื่อดูรายละเอียด run นั้นในส่วนล่างสุดของหน้า
+      </p>
       <div className="overflow-auto rounded-xl border border-border bg-surface">
         <table className="w-full text-left text-sm">
           <thead className="bg-surface-2 text-xs text-muted">

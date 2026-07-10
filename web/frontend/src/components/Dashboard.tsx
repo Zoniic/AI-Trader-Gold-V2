@@ -175,25 +175,32 @@ export function Dashboard() {
         <>
           <LivePanel />
 
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-medium text-muted">ประวัติ live run (เลือกดูรายละเอียด)</h2>
-            {liveRuns.length > 0 && (
+          {liveRuns.length > 0 && (
+            <div className="mb-3">
+              <label htmlFor="live-run-select" className="mb-1 block text-sm font-medium text-muted">
+                ดูประวัติย้อนหลังของ run ไหน?
+              </label>
+              <p className="mb-2 text-xs text-muted">
+                เลือกแล้วกราฟ + ตารางเทรดด้านล่างสุดของหน้าจะเปลี่ยนไปตาม run ที่เลือก
+                (ไม่กระทบสถานะ live ด้านบนนี้ ซึ่งอัปเดตสดตลอด)
+              </p>
               <select
+                id="live-run-select"
                 value={isLiveRun(selectedRunId) ? selectedRunId : ""}
                 onChange={(e) => setSelectedRunId(e.target.value)}
-                className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
+                className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground sm:w-auto"
               >
                 <option value="" disabled>
                   เลือก live run
                 </option>
                 {liveRuns.map((r) => (
                   <option key={r.run_id} value={r.run_id}>
-                    {r.strategy}:{r.timeframe} — {r.started_at}
+                    {r.strategy}:{r.timeframe} — เริ่ม {r.started_at}
                   </option>
                 ))}
               </select>
-            )}
-          </div>
+            </div>
+          )}
 
           {liveRuns.length === 0 && (
             <p className="mb-6 rounded-xl border border-border bg-surface p-4 text-sm text-muted">
@@ -206,20 +213,32 @@ export function Dashboard() {
 
       {tab === "backtest" && (
         <>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-medium text-muted">เลือกดู run ย้อนหลัง</h2>
+          <div className="mb-3">
+            <label htmlFor="backtest-run-select" className="mb-1 block text-sm font-medium text-muted">
+              ดูรายละเอียด run ไหน?
+            </label>
+            <p className="mb-2 text-xs text-muted">
+              เลือกแล้วกราฟ + ตารางเทรดด้านล่างสุดของหน้าจะเปลี่ยนไปตาม run ที่เลือก
+              (การ์ดตารางแข่งขัน/พอร์ตจำลอง/สภาวิเคราะห์ด้านล่างเป็นอิสระ ไม่ผูกกับตัวเลือกนี้)
+            </p>
             <select
+              id="backtest-run-select"
               value={!isLiveRun(selectedRunId) ? selectedRunId : ""}
               onChange={(e) => setSelectedRunId(e.target.value)}
-              className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-foreground"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-foreground sm:w-auto"
             >
               {backtestRuns.map((r) => (
-                <option key={r.run_id} value={r.run_id}>
-                  {r.run_id} ({r.strategy}, เทรด {r.total_trades ?? "-"})
+                <option key={r.run_id} value={r.run_id} title={r.run_id}>
+                  {r.strategy}:{r.timeframe ?? "H1"} — {r.total_trades ?? "-"} ไม้ —{" "}
+                  {r.started_at.slice(0, 16).replace("T", " ")}
                 </option>
               ))}
             </select>
           </div>
+
+          <h2 className="mb-1 mt-8 text-xs font-semibold uppercase tracking-wide text-muted">
+            การ์ดด้านล่างนี้ไม่ขึ้นกับตัวเลือกด้านบน — สรุปภาพรวมทุกทีมเสมอ
+          </h2>
 
           <LeagueTable runs={backtestRuns} onSelectRun={setSelectedRunId} />
 
@@ -230,6 +249,10 @@ export function Dashboard() {
           <CouncilReport />
 
           <TeamsInfo />
+
+          <h2 className="mb-1 mt-8 text-xs font-semibold uppercase tracking-wide text-muted">
+            ↓ รายละเอียดของ run ที่เลือกไว้ด้านบน ↓
+          </h2>
         </>
       )}
 
@@ -250,7 +273,9 @@ export function Dashboard() {
               {isLiveRun(detail.run.run_id) ? "LIVE" : "BACKTEST"}
             </span>
             กลยุทธ์: <span className="text-foreground">{detail.run.strategy}</span>{" "}
-            — run_id: <code className="text-foreground">{detail.run.run_id}</code>
+            — run_id: <code className="text-foreground" title={detail.run.run_id}>
+              {detail.run.run_id}
+            </code>
           </div>
 
           {detail.run.halted_at && (
