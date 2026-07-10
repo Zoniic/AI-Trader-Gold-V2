@@ -40,6 +40,15 @@ export function Dashboard() {
   const [error, setError] = useState<string>("");
   const selectedRunIdRef = useRef(selectedRunId);
   selectedRunIdRef.current = selectedRunId;
+  const detailSectionRef = useRef<HTMLDivElement>(null);
+
+  const jumpToRunDetail = useCallback((runId: string) => {
+    setSelectedRunId(runId);
+    // เลื่อนหลัง tick ถัดไปให้ DOM render เสร็จก่อน (กันกรณี section ยังไม่เคย mount)
+    requestAnimationFrame(() => {
+      detailSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
 
   const backtestRuns = useMemo(() => runs.filter((r) => !isLiveRun(r.run_id)), [runs]);
   const liveRuns = useMemo(() => runs.filter((r) => isLiveRun(r.run_id)), [runs]);
@@ -173,7 +182,7 @@ export function Dashboard() {
 
       {tab === "live" && (
         <>
-          <LivePanel />
+          <LivePanel onSelectRun={jumpToRunDetail} />
 
           {liveRuns.length > 0 && (
             <div className="mb-3">
@@ -240,7 +249,7 @@ export function Dashboard() {
             การ์ดด้านล่างนี้ไม่ขึ้นกับตัวเลือกด้านบน — สรุปภาพรวมทุกทีมเสมอ
           </h2>
 
-          <LeagueTable runs={backtestRuns} onSelectRun={setSelectedRunId} />
+          <LeagueTable runs={backtestRuns} onSelectRun={jumpToRunDetail} />
 
           <RegimeChampions />
 
@@ -256,6 +265,7 @@ export function Dashboard() {
         </>
       )}
 
+      <div ref={detailSectionRef} className="scroll-mt-4">
       {!detail && !error && (
         <p className="text-sm text-muted">กำลังโหลดข้อมูล...</p>
       )}
@@ -373,6 +383,7 @@ export function Dashboard() {
           )}
         </>
       )}
+      </div>
     </div>
   );
 }

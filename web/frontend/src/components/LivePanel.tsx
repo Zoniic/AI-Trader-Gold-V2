@@ -9,7 +9,7 @@ function fmtMoney(n: number): string {
   return `$${n.toFixed(2)}`;
 }
 
-export function LivePanel() {
+export function LivePanel({ onSelectRun }: { onSelectRun?: (runId: string) => void }) {
   const [status, setStatus] = useState<LiveStatus | null>(null);
   const [error, setError] = useState<string>("");
 
@@ -59,11 +59,16 @@ export function LivePanel() {
           🟢 Live Paper Trading — อัปเดตทุก {LIVE_POLL_MS / 1000} วินาที
         </h2>
       </div>
+      <p className="mb-2 text-xs text-muted">
+        คลิกการ์ดทีมไหนก็ได้เพื่อดูประวัติไม้ทั้งหมด (รวมที่ปิดไปแล้ว) ของทีมนั้นด้านล่างสุดของหน้า
+      </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {status.teams.map((t) => (
-          <div
+          <button
             key={t.run_id}
-            className="rounded-lg border border-border bg-background px-3 py-2.5"
+            type="button"
+            onClick={() => onSelectRun?.(t.run_id)}
+            className="rounded-lg border border-border bg-background px-3 py-2.5 text-left transition-colors hover:border-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           >
             <div className="mb-1 flex items-center justify-between">
               <span className="text-sm font-medium text-foreground">
@@ -120,7 +125,7 @@ export function LivePanel() {
                 {fmtMoney(t.total_pnl)}
               </span>
             </div>
-          </div>
+          </button>
         ))}
       </div>
     </div>
