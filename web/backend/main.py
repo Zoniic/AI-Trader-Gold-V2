@@ -162,6 +162,11 @@ def api_live_status() -> dict:
     if live_runs.empty:
         return {"active": False, "teams": []}
 
+    # ทุกครั้งที่ live_runner ถูก restart จะได้ run_id ใหม่ (มี timestamp ต่อท้าย) ของทีมเดิม —
+    # เอาแค่ run ล่าสุดต่อ (strategy, timeframe) เพื่อไม่ให้เห็นทีมซ้ำๆ จากการ restart ที่ผ่านมา
+    # (list_runs เรียง started_at DESC มาแล้ว จึงเก็บแถวแรกของแต่ละกลุ่มได้เลย)
+    live_runs = live_runs.drop_duplicates(subset=["strategy", "timeframe"], keep="first")
+
     # SQLite datetime('now') คืนค่าเป็น UTC เสมอ — ต้องเทียบกับ UTC เท่านั้น ห้ามใช้ local time
     # (เครื่องรันอยู่ timezone อื่น เช่น UTC+7 จะทำให้ diff คลาดเคลื่อนหลายชั่วโมง)
     now = datetime.now(timezone.utc).replace(tzinfo=None)
