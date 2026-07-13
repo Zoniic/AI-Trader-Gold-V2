@@ -241,7 +241,11 @@ def poll_new_bar(broker: MT5Broker, lt: LiveTeam, symbol: str, lookback: int = 8
 PENDING_CLOSE_WARN_ATTEMPTS = 10  # ~5 นาทีที่ poll_interval=30s ก่อนแจ้งเตือนว่า deal history ยังไม่ขึ้น
 
 
-def _reconcile_dry_run(lt: LiveTeam, cost: CostModel) -> None:
+def _close_emoji(pnl: float) -> str:
+    return "✅" if pnl >= 0 else "❌"
+
+
+def _reconcile_dry_run(lt: LiveTeam, cost: CostModel, discord_webhook_url: str | None = None) -> None:
     """dry_run ไม่มี ticket จริงจาก MT5 ให้เช็ค ก่อนหน้านี้ reconcile_open_position() แค่ return
     เฉยๆ ทำให้ current_price/floating_pnl ในหน้า dashboard ไม่เคยอัปเดตเลยตลอดทั้งไม้ (gap ที่เจอ
     ตอน audit) และไม้ dry-run ไม่เคยปิดเองด้วย (ไม่มีอะไรเช็ค SL/TP ให้) เลย simulate ง่ายๆ ตรงนี้:
@@ -281,6 +285,11 @@ def _reconcile_dry_run(lt: LiveTeam, cost: CostModel) -> None:
     on_trade_closed(lt.state, pnl, exit_idx, lt.cfg.get("trade_management", {}).get("cooldown_bars_after_loss", 0))
     print(f"[live-dry] {lt.team}:{lt.timeframe} (จำลอง) ไม้ปิดแล้ว outcome={outcome} pnl={pnl:.2f} "
           f"balance={lt.state.balance:.2f}", flush=True)
+    send_discord_alert(
+        f"{_close_emoji(pnl)} **ปิดไม้ (จำลอง)** — `{lt.team}:{lt.timeframe}` {meta['direction'].value} "
+        f"{lot} lot @ {exit_price:.2f} outcome={outcome}\nPnL: ${pnl:+.2f} | Balance: ${lt.state.balance:.2f}",
+        discord_webhook_url, level="info", dedupe_key=None,
+    )
     lt.open_ticket = None
     lt.open_signal_id = None
     lt.open_entry_meta = {}
@@ -295,7 +304,7 @@ def reconcile_open_position(
     ถ้าปิดไปแล้ว (โดน SL/TP จริงใน MT5) ดึง pnl มาอัปเดต state + log
     """
     if dry_run:
-        _reconcile_dry_run(lt, cost)
+        _reconcile_dry_run(lt, cost, discord_webhook_url=discord_webhook_url)
         return
     if lt.open_ticket is None:
         return
@@ -332,6 +341,11 @@ def reconcile_open_position(
     on_trade_closed(lt.state, pnl, exit_idx, lt.cfg.get("trade_management", {}).get("cooldown_bars_after_loss", 0))
     print(f"[live] {lt.team}:{lt.timeframe} ไม้ ticket={lt.open_ticket} ปิดแล้ว pnl={pnl:.2f} "
           f"balance={lt.state.balance:.2f}", flush=True)
+    send_discord_alert(
+        f"{_close_emoji(pnl)} **ปิดไม้** — `{lt.team}:{lt.timeframe}` ticket={lt.open_ticket} "
+        f"outcome={outcome}\nPnL: ${pnl:+.2f} | Balance: ${lt.state.balance:.2f}",
+        discord_webhook_url, level="info", dedupe_key=None,
+    )
     lt.open_ticket = None
     lt.open_signal_id = None
     lt.open_entry_meta = {}
@@ -468,6 +482,11 @@ def process_bar(
         signal_id=signal_id, direction=signal.direction.value, entry_time=bar_time,
         entry=signal.entry, sl=signal.sl, tp=signal.tp, lot=plan.lot,
         ticket=result.ticket, margin_used=margin_used, regime=str(regime_series.iloc[idx]),
+    )
+    send_discord_alert(
+        f"🔵 **เปิดไม้** — `{lt.team}:{lt.timeframe}` {signal.direction.value} {plan.lot} lot "
+        f"@ {signal.entry:.2f}\nSL: {signal.sl:.2f} | TP: {signal.tp:.2f} | เหตุผล: {signal.reason}",
+        discord_webhook_url, level="info", dedupe_key=None,
     )
 
     risk_dist = abs(signal.entry - signal.sl)
