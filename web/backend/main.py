@@ -194,6 +194,13 @@ def api_live_status() -> dict:
             except (ValueError, TypeError):
                 pass
 
+        # ปกติแล้วทีมละ 1 ไม้พร้อมกันเท่านั้น (v1 ไม่ pyramiding — ดู process_bar ใน live_runner.py)
+        # ถ้ามี >1 แถวที่ exit_time ว่างพร้อมกัน แปลว่ามี race/บั๊กที่ทำให้ DB ไม่ sync กับความจริง
+        # ห้ามเลือกแถวแรกแบบเงียบๆ (เคยเป็นต้นเหตุของบั๊กราคาค้าง) ต้อง log ให้เห็นชัดๆ แทน
+        if len(open_trades) > 1:
+            print(f"[web] คำเตือน: {run['strategy']}:{run['timeframe']} มี {len(open_trades)} ไม้เปิด "
+                  f"พร้อมกัน (ควรมีแค่ 1) — โชว์ไม้ล่าสุด ตรวจสอบ DB", flush=True)
+            open_trades = open_trades.tail(1)
         open_position = _sanitize(open_trades)[0] if not open_trades.empty else None
         if open_position is not None and open_position.get("margin_used") and run["initial_balance"]:
             open_position["margin_pct"] = round(

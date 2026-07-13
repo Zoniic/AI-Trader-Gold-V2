@@ -123,7 +123,7 @@ def find_open_trade(db_path: str, team: str, timeframe: str) -> dict | None:
     conn = _connect(db_path)
     try:
         row = conn.execute(
-            "SELECT t.id, t.ticket, t.direction, t.entry, t.sl, t.tp, t.lot, t.entry_time "
+            "SELECT t.id, t.ticket, t.direction, t.entry, t.sl, t.tp, t.lot, t.entry_time, t.signal_id "
             "FROM trades t JOIN runs r ON t.run_id = r.run_id "
             "WHERE r.strategy = ? AND r.timeframe = ? AND t.exit_time IS NULL AND t.ticket IS NOT NULL "
             "ORDER BY t.id DESC LIMIT 1",
@@ -131,7 +131,7 @@ def find_open_trade(db_path: str, team: str, timeframe: str) -> dict | None:
         ).fetchone()
         if row is None:
             return None
-        cols = ["id", "ticket", "direction", "entry", "sl", "tp", "lot", "entry_time"]
+        cols = ["id", "ticket", "direction", "entry", "sl", "tp", "lot", "entry_time", "signal_id"]
         return dict(zip(cols, row))
     finally:
         conn.close()

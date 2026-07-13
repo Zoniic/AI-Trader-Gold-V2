@@ -113,6 +113,7 @@ class LiveTeam:
     open_entry_meta: dict = field(default_factory=dict)
     manage_state: ManageState | None = None
     open_trade_id: int | None = None
+    pending_close_attempts: int = 0
 
 
 def bootstrap_team(
@@ -181,6 +182,7 @@ def bootstrap_team(
                 direction = Direction.BUY if open_row["direction"] == "BUY" else Direction.SELL
                 lt.open_ticket = open_row["ticket"]
                 lt.open_trade_id = open_row["id"]
+                lt.open_signal_id = open_row["signal_id"]
                 lt.open_entry_meta = {
                     "entry_idx": len(df) - 1, "entry": open_row["entry"], "sl": open_row["sl"],
                     "tp": open_row["tp"], "lot": open_row["lot"], "direction": direction,
@@ -200,8 +202,17 @@ def bootstrap_team(
                 # broker SL ปัจจุบันอาจถูกเลื่อนไปแล้ว (BE/trailing) ก่อน restart — ใช้ค่าจริงจาก
                 # position แทนค่า original_sl ตอนสร้าง ManageState กันเลื่อน SL ย้อนกลับผิดทาง
                 lt.manage_state.current_sl = float(pos.sl) if pos.sl else open_row["sl"]
+                # lot ที่เหลือจริงใน broker (pos.volume) อาจน้อยกว่า lot ตอนเปิด (open_row["lot"])
+                # ถ้า partial TP ไปแล้วก่อน restart — ต้อง "จำ" ว่า partial_done=True แล้ว ไม่งั้นพอ
+                # ราคาแตะ partial_level อีกครั้ง manage_open_position() จะพยายามปิดบางส่วนซ้ำด้วย
+                # fraction ที่คำนวณจาก lot เต็ม (ผิด เพราะ lot จริงเหลือน้อยกว่านั้นแล้ว)
+                broker_lot = float(pos.volume)
+                if broker_lot < open_row["lot"] - 1e-9:
+                    lt.manage_state.partial_done = True
+                    lt.manage_state.remaining_lot = broker_lot
                 print(f"[live] {team}:{tf} โหลดไม้เปิดค้างกลับมา — ticket={open_row['ticket']} "
-                      f"entry={open_row['entry']} current_sl={lt.manage_state.current_sl}", flush=True)
+                      f"entry={open_row['entry']} current_sl={lt.manage_state.current_sl} "
+                      f"lot={broker_lot}/{open_row['lot']} partial_done={lt.manage_state.partial_done}", flush=True)
 
     return lt
 
@@ -225,7 +236,12 @@ def poll_new_bar(broker: MT5Broker, lt: LiveTeam, symbol: str, lookback: int = 8
     return True
 
 
-def reconcile_open_position(broker: MT5Broker, lt: LiveTeam, dry_run: bool) -> None:
+PENDING_CLOSE_WARN_ATTEMPTS = 10  # ~5 นาทีที่ poll_interval=30s ก่อนแจ้งเตือนว่า deal history ยังไม่ขึ้น
+
+
+def reconcile_open_position(
+    broker: MT5Broker, lt: LiveTeam, dry_run: bool, discord_webhook_url: str | None = None,
+) -> None:
     """เช็ค position ที่เปิดค้างไว้ ถ้ายังเปิดอยู่ อัปเดตราคาปัจจุบัน/กำไรลอย
     ถ้าปิดไปแล้ว (โดน SL/TP จริงใน MT5) ดึง pnl มาอัปเดต state + log
     """
@@ -237,10 +253,24 @@ def reconcile_open_position(broker: MT5Broker, lt: LiveTeam, dry_run: bool) -> N
     if pos is not None:
         if lt.open_trade_id is not None:
             lt.logger.update_open_trade(lt.open_trade_id, float(pos.price_current), float(pos.profit))
+        lt.pending_close_attempts = 0
         return  # ยังเปิดอยู่
     pnl = broker.get_closed_deal_pnl(lt.open_ticket)
     if pnl is None:
+        # position หายจาก MT5 แล้วแต่ deal history ยังไม่ขึ้น — ปกติแล้วเกิดชั่วครู่แล้วหาย แต่ถ้าค้าง
+        # นานผิดปกติ (broker ไม่ sync/บั๊ก) ต้อง "ส่งเสียง" แทนที่จะเงียบไปเรื่อยๆ แบบ no-op ถาวร
+        lt.pending_close_attempts += 1
+        if lt.pending_close_attempts == PENDING_CLOSE_WARN_ATTEMPTS:
+            print(f"[live] {lt.team}:{lt.timeframe} คำเตือน: ticket={lt.open_ticket} หายจาก "
+                  f"positions_get แต่หา deal history ไม่เจอมา {lt.pending_close_attempts} รอบติดกัน", flush=True)
+            send_discord_alert(
+                f"⚠️ **ไม้ค้างสถานะไม่ชัดเจน** — `{lt.team}:{lt.timeframe}` ticket={lt.open_ticket} "
+                f"หายจาก MT5 positions แต่หา deal history ยืนยันผลไม่เจอมา {lt.pending_close_attempts} รอบ",
+                discord_webhook_url, level="warning",
+                dedupe_key=f"pending_close_{lt.team}_{lt.timeframe}_{lt.open_ticket}", dedupe_seconds=1800,
+            )
         return  # ยังหา deal history ไม่เจอ รอรอบถัดไป
+    lt.pending_close_attempts = 0
     exit_idx = len(lt.df) - 1
     meta = lt.open_entry_meta
     outcome = "tp" if pnl >= 0 else "sl"  # ประมาณจากผลจริง (ไม่รู้ว่าโดน SL/TP เป๊ะจาก deal เดียว)
@@ -425,6 +455,24 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
         for team, tf in roster
     ]
     print(f"[live] bootstrap เสร็จ {len(teams)} ทีม เริ่ม poll ทุก {poll_interval}s (Ctrl+C หยุด)", flush=True)
+
+    # เช็ค orphan position: ไม้ที่เปิดจริงใน MT5 แต่ไม่มีทีมไหน claim (ticket ไม่ตรงกับของทีมไหนเลย)
+    # เกิดได้ถ้า process ตายพอดีระหว่าง send_order() สำเร็จกับ log_trade_open() commit เสร็จ — ไม้แบบนี้
+    # จะไม่มี record ใน DB เลยให้ find_open_trade() เจอตอน bootstrap จึงต้องสแกนเทียบกับ broker ตรงๆ
+    if not dry_run:
+        claimed_tickets = {lt.open_ticket for lt in teams if lt.open_ticket is not None}
+        broker_positions = broker.get_open_positions(settings.symbol)
+        orphans = [p for p in broker_positions if p.ticket not in claimed_tickets]
+        if orphans:
+            orphan_desc = ", ".join(f"ticket={p.ticket} vol={p.volume}" for p in orphans)
+            print(f"[live] คำเตือน: พบ {len(orphans)} orphan position ไม่มีทีมไหน claim — {orphan_desc}",
+                  flush=True)
+            send_discord_alert(
+                f"🚨 **พบไม้กำพร้า (orphan position)** — {len(orphans)} ไม้ใน MT5 ไม่มี record ใน DB เลย: "
+                f"{orphan_desc}\nน่าจะเกิดจาก process ตายระหว่างเปิดไม้ก่อน log ลง DB สำเร็จ — ตรวจสอบด้วยตนเอง",
+                webhook, level="critical", dedupe_key=None,
+            )
+
     send_discord_alert(
         f"🟢 **live_runner เริ่มทำงาน** — mode={'LIVE' if not dry_run else 'DRY-RUN'} "
         f"{len(teams)} ทีม balance=${account_balance:.2f}",
@@ -437,7 +485,7 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
             cycle += 1
             for lt in teams:
                 try:
-                    reconcile_open_position(broker, lt, dry_run)
+                    reconcile_open_position(broker, lt, dry_run, discord_webhook_url=webhook)
                     if poll_new_bar(broker, lt, settings.symbol):
                         if lt.open_ticket is not None:
                             manage_open_position(broker, lt, settings.symbol, dry_run)

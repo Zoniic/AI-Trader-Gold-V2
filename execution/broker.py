@@ -184,6 +184,15 @@ class MT5Broker:
         except Exception:
             return None
 
+    def get_open_positions(self, symbol: str):
+        """คืนรายการ position ทั้งหมดที่ยังเปิดอยู่ของ symbol นี้ — ใช้เช็ค orphan ticket ตอน
+        startup (ไม้เปิดจริงใน MT5 แต่ไม่มี record ใน DB เพราะ process ตายระหว่าง send_order()
+        สำเร็จกับ log_trade_open() commit — เคสหายากแต่เกิดได้จริง)
+        """
+        self._assert_demo()
+        positions = self._mt5.positions_get(symbol=symbol)
+        return list(positions) if positions else []
+
     def get_position(self, ticket: int):
         """คืน position object ของ MT5 ถ้ายังเปิดอยู่ ไม่งั้นคืน None (ไม้ปิดไปแล้ว)"""
         self._assert_demo()
