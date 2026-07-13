@@ -1,0 +1,48 @@
+{
+  "strategy_params": {
+    "rsi_period": 2,
+    "rsi_extreme_low": 10.0,
+    "rsi_extreme_high": 90.0,
+    "ema_period": 20,
+    "min_stretch_atr": 1.5,
+    "atr_period": 14,
+    "atr_mult_sl": 1.5,
+    "atr_mult_tp": 0.6
+  },
+  "trade_management": {
+    "partial_tp_r": 0.5,
+    "partial_fraction": 0.6,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": null,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": false,
+    "cooldown_bars_after_loss": 3
+  },
+  "notes": "รัน config เดียวกับ H1 บน M15 (สายซิ่ง): WR 68% PF 0.32 — แย่กว่า H1 มากเพราะ TF เล็ก ATR เล็ก ต้นทุนกินสัดส่วน TP หนักกว่า kill-switch DD 15.2% ⚠️ ห้ามเอาไป live",
+  "risk": {
+    "risk_per_trade_pct": 0.5,
+    "max_daily_loss_pct": 2.0,
+    "max_weekly_loss_pct": 4.0,
+    "max_drawdown_pct": 15.0,
+    "sizing_mode": "fixed"
+  },
+  "blocked_hours": [
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23
+  ]
+}

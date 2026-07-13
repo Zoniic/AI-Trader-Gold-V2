@@ -1,0 +1,48 @@
+{
+  "strategy_params": {
+    "rsi_period": 2,
+    "rsi_extreme_low": 10.0,
+    "rsi_extreme_high": 90.0,
+    "ema_period": 20,
+    "min_stretch_atr": 1.5,
+    "atr_period": 14,
+    "atr_mult_sl": 1.5,
+    "atr_mult_tp": 0.6
+  },
+  "trade_management": {
+    "partial_tp_r": 0.5,
+    "partial_fraction": 0.6,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": null,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": false,
+    "cooldown_bars_after_loss": 3
+  },
+  "notes": "ทดลอง 7 รอบบน H1 (2023-2026): เป้า WR 80% ด้วย R:R กลับหัว (TP 0.6×ATR / SL 1.5×ATR จุดคุ้มทุน WR~77% หลังต้นทุน) | รอบ1 default: WR 71.2% PF 0.755 — WR สูงสุดในลีก (แชมป์เดิม sr_bounce M30 = 59.8%) แต่ยังไม่พอเลี้ยง R:R กลับหัว | รอบ2 เข้มขึ้น RSI 5/95 + TP 0.8: WR ร่วง 62% แย่ลง | รอบ3 partial@0.5R+BE: WR 70.3% PF 0.78 | รอบ4 เทรดเฉพาะ London: แย่ลง (ช่วงเทรนด์แรง สวนโดนไถล) | รอบ5 เทรดเฉพาะเอเชีย: PF 0.783 ดีสุด อยู่รอดถึงกลาง 2025 | รอบ6 SL 1.0: แย่ลง (โดน noise เขี่ย) | รอบ7 stretch 1.5: ไม่ช่วย | สรุป: เพดาน WR จริงของ setup นี้คือ ~70-71% ต่ำกว่าจุดคุ้มทุน 77% ของ R:R กลับหัวบนต้นทุนจริง (spread session-aware) — kill-switch ทำงานทุกรอบ ⚠️ ห้ามเอาไป live — คณิตศาสตร์ WR 80% + กำไรจริงบนต้นทุนจริงของ gold ยังพิสูจน์ไม่ได้ในทุก config ที่ลอง",
+  "risk": {
+    "risk_per_trade_pct": 0.5,
+    "max_daily_loss_pct": 2.0,
+    "max_weekly_loss_pct": 4.0,
+    "max_drawdown_pct": 15.0,
+    "sizing_mode": "fixed"
+  },
+  "blocked_hours": [
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23
+  ]
+}

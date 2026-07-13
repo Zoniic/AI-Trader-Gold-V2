@@ -34,8 +34,8 @@ def _mixed_market_df(n: int = 1200, seed: int = 11) -> pd.DataFrame:
 ALL_TEAMS = sorted(STRATEGY_REGISTRY.keys())
 
 
-def test_registry_has_all_12_teams():
-    assert len(STRATEGY_REGISTRY) == 12
+def test_registry_has_all_13_teams():
+    assert len(STRATEGY_REGISTRY) == 13
 
 
 @pytest.mark.parametrize("team", ALL_TEAMS)
