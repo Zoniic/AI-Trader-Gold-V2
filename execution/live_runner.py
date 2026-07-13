@@ -519,7 +519,9 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
     print(f"[live] เชื่อมต่อ MT5 สำเร็จ — dry_run={dry_run} roster={roster}", flush=True)
     account_balance = broker.account_balance() if not dry_run else settings.initial_balance
     cost = CostModel(spread_points=settings.spread_points, slippage_points=settings.slippage_points)
-    webhook = settings.discord_webhook_url
+    # dry-run กับ live ยิงเข้าคนละ webhook ตั้งใจ — กันข้อความเปิด/ปิดไม้ปนกันในช่องเดียว จนแยกไม่ออก
+    # ว่าอันไหนเงินจริง (ดู DISCORD_WEBHOOK_URL_DRY_RUN ใน config.py/.env.example)
+    webhook = settings.discord_webhook_url_dry_run if dry_run else settings.discord_webhook_url
 
     teams = [
         bootstrap_team(broker, team, tf, settings.symbol, account_balance, settings.log_db_path, dry_run=dry_run)

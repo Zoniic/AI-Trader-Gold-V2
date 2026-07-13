@@ -2,6 +2,7 @@ import sqlite3
 
 import pandas as pd
 
+import backtest.engine as engine_module
 from backtest.costs import CostModel
 from backtest.engine import run_backtest
 from core.signal import MarketData
@@ -54,3 +55,36 @@ def test_engine_logs_every_signal_decision_and_trade(tmp_path):
     assert decision_count == signal_count  # ทุก signal ต้องมี decision ตามมาเสมอ (อนุมัติหรือไม่ก็ตาม)
     assert trade_count == len(result.trades)
     assert trade_count <= signal_count  # เทรดจริงต้อง <= สัญญาณ (บาง signal ถูกปฏิเสธโดย risk guard)
+
+
+def test_discord_alerts_capped_to_limit_to_avoid_spam(monkeypatch):
+    """backtest มีเป็นร้อยไม้ใน ไม่กี่วินาที — ถ้าส่ง Discord ทุกไม้จะ spam/โดน rate-limit เลยต้อง
+    หยุดส่งหลังครบ discord_alert_limit ไม้ (นับเป็นคู่ open+close ต่อไม้ ไม่ใช่นับข้อความ) แม้ backtest
+    จะมีไม้มากกว่านั้นก็ตาม (ยังรันจนจบตามปกติ แค่ไม่แจ้งเตือนไม้ที่เกินโควตา)
+    """
+    sent_messages = []
+
+    def _fake_send(message, webhook_url, level="info", dedupe_key=None, dedupe_seconds=300):
+        sent_messages.append(message)
+        return True
+
+    monkeypatch.setattr(engine_module, "send_discord_alert", _fake_send)
+
+    df = make_synthetic_df(3000, seed=3)
+    data = MarketData(df=df)
+    strategy = EMACrossStrategy()
+    risk_cfg = RiskConfig(account_balance=10000, risk_per_trade_pct=1.0)
+    cost = CostModel(spread_points=30, slippage_points=5)
+
+    result = run_backtest(
+        strategy, data, risk_cfg, cost,
+        discord_webhook_url="https://discord.com/api/webhooks/fake/fake", discord_alert_limit=3,
+    )
+
+    assert len(result.trades) > 3  # ต้องมีไม้มากกว่า limit ถึงจะทดสอบการ cap ได้จริง
+    open_msgs = [m for m in sent_messages if "🔵" in m]
+    close_msgs = [m for m in sent_messages if "✅" in m or "❌" in m]
+    assert len(open_msgs) == 3
+    assert len(close_msgs) == 3
+    # ข้อความสุดท้ายต้องเป็นตัวแจ้งว่าหยุดส่งแล้ว ไม่ใช่เงียบหายไปเฉยๆ
+    assert any("หยุดแจ้งเตือน" in m for m in sent_messages)

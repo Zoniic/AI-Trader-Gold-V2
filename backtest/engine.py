@@ -19,11 +19,15 @@ from backtest.regime import compute_regime
 from backtest.review import review_trade, score_trade
 from core.signal import Direction, MarketData, Signal
 from core.strategy import Strategy
+from execution.alerts import send_discord_alert
 from persistence.db import RunLogger
 from risk.live_gate import GateState, check_gate, on_trade_closed, roll_calendar
 from risk.position_sizing import RiskConfig, RiskManager
 
 POST_EXIT_LOOKAHEAD_BARS = 20
+DEFAULT_DISCORD_ALERT_LIMIT = 10  # กันสแปม/rate-limit — backtest มีเป็นร้อยไม้ใน ไม่กี่วินาที ถ้าส่ง
+# Discord ทุกไม้จริงๆ จะช้าลงมาก (แต่ละข้อความคือ HTTP request จริง) และเสี่ยงโดน Discord บล็อก
+# webhook เลยจำกัดไว้แค่ N ไม้แรกพอเป็นตัวอย่างว่าระบบแจ้งเตือนทำงานเหมือน live จริง แล้วหยุดส่ง
 
 
 @dataclass(frozen=True)
@@ -222,6 +226,8 @@ def run_backtest(
     entry_confirm_bars: int = 0,
     entry_confirm_threshold_r: float = 0.3,
     blocked_hours: list[int] | None = None,
+    discord_webhook_url: str | None = None,
+    discord_alert_limit: int = DEFAULT_DISCORD_ALERT_LIMIT,
 ) -> BacktestResult:
     """allowed_regimes: จำกัดทีมให้เทรดเฉพาะสภาวะตลาดที่ตัวเองถนัด (None = เทรดทุกสภาวะ)
 
@@ -259,6 +265,7 @@ def run_backtest(
     balance_points: list[tuple[pd.Timestamp, float]] = [(df.index[0], state.balance)]
     halted_at: pd.Timestamp | None = None
     halt_reason = ""
+    discord_alerts_sent = 0  # นับเป็น "ไม้" (open+close คู่กัน) ไม่ใช่นับข้อความ — กัน spam/rate-limit
 
     i = warmup
     while i < len(df) - 1:
@@ -370,6 +377,14 @@ def run_backtest(
         if logger is not None and signal_id is not None:
             logger.log_decision(signal_id, approved=True, reason=plan.reason, lot=plan.lot)
 
+        alert_this_trade = discord_webhook_url is not None and discord_alerts_sent < discord_alert_limit
+        if alert_this_trade:
+            send_discord_alert(
+                f"🔵 **เปิดไม้ (backtest)** — `{strategy.name}` {signal.direction.value} {plan.lot} lot "
+                f"@ {signal.entry:.2f}\nSL: {signal.sl:.2f} | TP: {signal.tp:.2f} | เหตุผล: {signal.reason}",
+                discord_webhook_url, level="info", dedupe_key=None,
+            )
+
         exit_idx, parts, outcome, mae_r, mfe_r = _simulate_trade(
             df, entry_idx + 1, signal.direction, signal.entry, signal.sl, signal.tp, max_hold, management
         )
@@ -421,6 +436,21 @@ def run_backtest(
         )
         trades.append(trade)
         balance_points.append((df.index[exit_idx], state.balance))
+
+        if alert_this_trade:
+            emoji = "✅" if pnl >= 0 else "❌"
+            send_discord_alert(
+                f"{emoji} **ปิดไม้ (backtest)** — `{strategy.name}` outcome={outcome}\n"
+                f"PnL: ${pnl:+.2f} ({trade.pnl_r:+.2f}R) | Balance: ${state.balance:.2f}",
+                discord_webhook_url, level="info", dedupe_key=None,
+            )
+            discord_alerts_sent += 1
+            if discord_alerts_sent == discord_alert_limit:
+                send_discord_alert(
+                    f"ℹ️ **หยุดแจ้งเตือน backtest** — `{strategy.name}` ส่งครบ {discord_alert_limit} "
+                    "ไม้ตัวอย่างแล้ว ไม้ที่เหลือจะไม่แจ้งเตือน (กัน spam/rate-limit — backtest ยังรันต่อปกติ)",
+                    discord_webhook_url, level="info", dedupe_key=None,
+                )
 
         if logger is not None and signal_id is not None:
             logger.log_trade(signal_id, trade)

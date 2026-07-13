@@ -51,6 +51,15 @@ def parse_args() -> argparse.Namespace:
         "--confirm-threshold-r", type=float, default=0.3,
         help="ราคาต้องไปทางเรากี่ R ถึงยืนยันเข้าไม้จริง",
     )
+    parser.add_argument(
+        "--discord-alert", action="store_true",
+        help="ส่ง Discord แจ้งเตือนเปิด/ปิดไม้เหมือน live (ใช้ DISCORD_WEBHOOK_URL_DRY_RUN) "
+             "จำกัดแค่ N ไม้แรก (ดู --discord-alert-limit) กัน spam/rate-limit",
+    )
+    parser.add_argument(
+        "--discord-alert-limit", type=int, default=10,
+        help="จำนวนไม้สูงสุดที่จะแจ้งเตือน Discord ตอน backtest (ค่าเริ่มต้น 10)",
+    )
     return parser.parse_args()
 
 
@@ -139,6 +148,8 @@ def main() -> None:
         disable_dd_halt=args.disable_dd_halt,
         entry_confirm_bars=args.confirm_bars,
         entry_confirm_threshold_r=args.confirm_threshold_r,
+        discord_webhook_url=settings.discord_webhook_url_dry_run if args.discord_alert else None,
+        discord_alert_limit=args.discord_alert_limit,
     )
 
     trade_pnls = [t.pnl for t in result.trades]
