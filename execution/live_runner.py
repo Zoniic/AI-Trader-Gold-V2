@@ -36,7 +36,7 @@ from config import load_settings
 from data.mt5_loader import TIMEFRAME_MAP
 from execution.alerts import send_discord_alert
 from execution.broker import MT5Broker, NotDemoAccountError
-from persistence.db import RunLogger, load_gate_state, save_gate_state
+from persistence.db import RunLogger, find_open_trade, load_gate_state, save_gate_state
 from risk.live_gate import GateState, check_gate, on_trade_closed, roll_calendar
 from risk.position_sizing import RiskConfig, RiskManager
 import strategies  # noqa: F401 เติม registry
@@ -117,7 +117,7 @@ class LiveTeam:
 
 def bootstrap_team(
     broker: MT5Broker, team: str, tf: str, symbol: str, account_balance: float, db_path: str,
-    lookback: int = 800,
+    lookback: int = 800, dry_run: bool = True,
 ) -> LiveTeam:
     cls = STRATEGY_REGISTRY[team]
     cfg = load_team_config(team, cls, timeframe=tf)
@@ -160,13 +160,50 @@ def bootstrap_team(
     else:
         state = GateState(balance=account_balance)
 
-    return LiveTeam(
+    lt = LiveTeam(
         team=team, timeframe=tf, strategy=strat, cfg=cfg, df=df,
         last_bar_time=df.index[-1],
         state=state,
         risk=RiskManager(risk_cfg), risk_cfg=risk_cfg, logger=logger,
         management=TradeManagement(**cfg["trade_management"]),
     )
+
+    # ไม้ที่เปิดค้างไว้ตอน process ตาย/restart ยังเปิดอยู่จริงใน MT5 แต่ LiveTeam ใหม่ไม่รู้จัก
+    # ticket เดิม (open_ticket เริ่มที่ None เสมอ) — ถ้าไม่ดึงกลับมา reconcile_open_position()
+    # จะเช็ค `if lt.open_ticket is None: return` แล้วกลายเป็น no-op ถาวรสำหรับไม้นั้น (ราคา/กำไรลอย
+    # ค้างค่าเดิมไม่อัปเดตอีกเลยจนกว่าไม้จะปิด) เลยต้องหาไม้ที่ยัง exit_time IS NULL ของทีมนี้จาก DB
+    # แล้วเช็คกับ broker ว่ายังเปิดอยู่จริงหรือเปล่าก่อน re-attach
+    if not dry_run:
+        open_row = find_open_trade(db_path, team, tf)
+        if open_row is not None:
+            pos = broker.get_position(open_row["ticket"])
+            if pos is not None:
+                direction = Direction.BUY if open_row["direction"] == "BUY" else Direction.SELL
+                lt.open_ticket = open_row["ticket"]
+                lt.open_trade_id = open_row["id"]
+                lt.open_entry_meta = {
+                    "entry_idx": len(df) - 1, "entry": open_row["entry"], "sl": open_row["sl"],
+                    "tp": open_row["tp"], "lot": open_row["lot"], "direction": direction,
+                }
+                risk_dist = abs(open_row["entry"] - open_row["sl"])
+                mgmt = lt.management
+                lt.manage_state = ManageState(
+                    direction=direction, entry=open_row["entry"], original_sl=open_row["sl"],
+                    tp=open_row["tp"], lot=open_row["lot"],
+                    partial_level=(
+                        open_row["entry"] + direction.sign * risk_dist * mgmt.partial_tp_r
+                        if mgmt.partial_tp_r is not None else None
+                    ),
+                    trail_dist=(risk_dist * mgmt.trailing_stop_r if mgmt.trailing_stop_r is not None else None),
+                    activate_level=open_row["entry"] + direction.sign * risk_dist * mgmt.trailing_activate_r,
+                )
+                # broker SL ปัจจุบันอาจถูกเลื่อนไปแล้ว (BE/trailing) ก่อน restart — ใช้ค่าจริงจาก
+                # position แทนค่า original_sl ตอนสร้าง ManageState กันเลื่อน SL ย้อนกลับผิดทาง
+                lt.manage_state.current_sl = float(pos.sl) if pos.sl else open_row["sl"]
+                print(f"[live] {team}:{tf} โหลดไม้เปิดค้างกลับมา — ticket={open_row['ticket']} "
+                      f"entry={open_row['entry']} current_sl={lt.manage_state.current_sl}", flush=True)
+
+    return lt
 
 
 def poll_new_bar(broker: MT5Broker, lt: LiveTeam, symbol: str, lookback: int = 800) -> bool:
@@ -384,7 +421,7 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
     webhook = settings.discord_webhook_url
 
     teams = [
-        bootstrap_team(broker, team, tf, settings.symbol, account_balance, settings.log_db_path)
+        bootstrap_team(broker, team, tf, settings.symbol, account_balance, settings.log_db_path, dry_run=dry_run)
         for team, tf in roster
     ]
     print(f"[live] bootstrap เสร็จ {len(teams)} ทีม เริ่ม poll ทุก {poll_interval}s (Ctrl+C หยุด)", flush=True)

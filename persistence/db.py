@@ -114,6 +114,29 @@ CREATE TABLE IF NOT EXISTS gate_state (
 """
 
 
+def find_open_trade(db_path: str, team: str, timeframe: str) -> dict | None:
+    """หาไม้ที่ยังเปิดอยู่ (exit_time IS NULL) ล่าสุดของทีม/TF นี้ ข้าม run_id เดิม —
+    ใช้ตอน bootstrap_team() restart เพื่อ "จำ" ไม้ที่ยังเปิดอยู่จริงใน MT5 กลับมา
+    ไม่งั้น open_ticket จะเป็น None ตลอดไปหลัง restart ทำให้ reconcile_open_position()
+    กลายเป็น no-op ถาวร (ราคาปัจจุบัน/กำไรลอยค้างค่าเดิมไม่อัปเดตอีกเลย)
+    """
+    conn = _connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT t.id, t.ticket, t.direction, t.entry, t.sl, t.tp, t.lot, t.entry_time "
+            "FROM trades t JOIN runs r ON t.run_id = r.run_id "
+            "WHERE r.strategy = ? AND r.timeframe = ? AND t.exit_time IS NULL AND t.ticket IS NOT NULL "
+            "ORDER BY t.id DESC LIMIT 1",
+            (team, timeframe),
+        ).fetchone()
+        if row is None:
+            return None
+        cols = ["id", "ticket", "direction", "entry", "sl", "tp", "lot", "entry_time"]
+        return dict(zip(cols, row))
+    finally:
+        conn.close()
+
+
 def _migrate_add_regime_column(conn: sqlite3.Connection) -> None:
     """เผื่อ DB เก่าที่สร้างก่อนมีคอลัมน์ใหม่ — ALTER TABLE ให้ทันสมัย"""
     migrations = {
