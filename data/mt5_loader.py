@@ -38,6 +38,10 @@ def fetch_history(settings: Settings) -> pd.DataFrame:
         raise ConnectionError(f"เชื่อมต่อ MT5 ไม่สำเร็จ: {mt5.last_error()}")
 
     try:
+        # copy_rates_range คืนค่าว่างเงียบๆ ถ้า symbol ไม่ได้อยู่ใน Market Watch — ต้อง select
+        # ก่อนเสมอ (เจอบั๊กนี้ตอนดึง M5: error message เดิมชี้ไปทาง "ชื่อ symbol ผิด" ทำให้เข้าใจผิด
+        # ทั้งที่จริง symbol ถูกอยู่แล้ว แค่ยังไม่ได้ select)
+        mt5.symbol_select(settings.symbol, True)
         timeframe = getattr(mt5, TIMEFRAME_MAP[settings.timeframe])
         date_from = pd.Timestamp(settings.start_date)
         date_to = pd.Timestamp(settings.end_date)

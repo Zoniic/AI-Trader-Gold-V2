@@ -1,0 +1,33 @@
+{
+  "strategy_params": {
+    "fast": 5,
+    "slow": 13,
+    "structure_period": 50,
+    "rsi_period": 7,
+    "atr_period": 10,
+    "atr_mult_sl": 0.8,
+    "atr_mult_tp": 1.8
+  },
+  "trade_management": {
+    "partial_tp_r": 1.0,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.0,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": false
+  },
+  "notes": "รอบ1: default ไม่กรอง regime → PF<1 ทุก regime, kill-switch DD 20.7% ใน 25 ไม้แรก | รอบ2: allowed_regimes=['trend','volatile'] → รอดนานขึ้น (166 ไม้) แต่ยัง PF 0.48-0.74, kill-switch DD 15.2% | รอบ3: ขยาย R:R เป็น 1:1.8 (atr_mult_sl 0.7->0.8, atr_mult_tp 1.0->1.8) → win rate ร่วงลงมาชดเชยพอดี PF 0.46-0.85 ยังแพ้ | รอบ4: เปิด partial TP@1R + BE + trailing (snowball เหมือนทีมอื่น) → ยังแพ้ PF 0.51-0.56, kill-switch DD 15.0% ทุกรอบ | สรุป 4 รอบ: ไม่ใช่ปัญหา parameter tuning แล้ว — สัญญาณ EMA5/13 cross + RSI7 momentum บน M15 gold ไม่มี edge จริงตามที่ทดสอบมา (M5 ก็เจอผลคล้ายกัน PF 0.82-0.87 ยังแพ้) ⚠️ ห้ามเอาไป live หรือใส่ใน portfolio จนกว่าจะ redesign สัญญาณใหม่ (ลอง mean-reversion scalp แทน momentum, หรือเพิ่ม volume/tick confirmation) แล้ว validate ผ่านก่อน",
+  "allowed_regimes": [
+    "trend",
+    "volatile"
+  ],
+  "blocked_hours": null,
+  "min_approvals": 5,
+  "risk": {
+    "risk_per_trade_pct": 0.3,
+    "max_daily_loss_pct": 2.0,
+    "max_weekly_loss_pct": 4.0,
+    "max_drawdown_pct": 15.0,
+    "sizing_mode": "fixed"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "strategy_params": {
+    "fast": 5,
+    "slow": 13,
+    "structure_period": 50,
+    "rsi_period": 7,
+    "atr_period": 10,
+    "atr_mult_sl": 0.8,
+    "atr_mult_tp": 1.8
+  },
+  "trade_management": {
+    "partial_tp_r": 1.0,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.0,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": false
+  },
+  "notes": "รัน config เดียวกับ M15 (หลัง 4 รอบ tune) บนข้อมูล M5 จริง (9 เดือนล่าสุด, 53k แท่ง จาก MT5 — broker จำกัด M5 history query ~53k แท่ง/ครั้ง ดึงได้แค่ช่วง 2025-10 เป็นต้นมา) ผล: PF 0.82-0.87 (volatile/trend) ยังแพ้ kill-switch DD 15.1% ที่ 589 ไม้ 'แพ้แบบผิดทางทันที' สูงถึง 122/589 ไม้ ชี้ว่าปัญหาคือคุณภาพสัญญาณเข้า ไม่ใช่แค่ SL/TP ⚠️ ห้ามเอาไป live จนกว่าจะ redesign สัญญาณ",
+  "allowed_regimes": [
+    "trend",
+    "volatile"
+  ],
+  "blocked_hours": null,
+  "min_approvals": 5,
+  "risk": {
+    "risk_per_trade_pct": 0.3,
+    "max_daily_loss_pct": 2.0,
+    "max_weekly_loss_pct": 4.0,
+    "max_drawdown_pct": 15.0,
+    "sizing_mode": "fixed"
+  }
+}

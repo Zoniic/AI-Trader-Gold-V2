@@ -14,3 +14,4 @@ from . import trend_pullback  # noqa: F401  ทีม 8 Dip Buyers (pullback con
 from . import volatility_breakout  # noqa: F401  ทีม 9 Range Expanders (Larry Williams)
 from . import sr_bounce  # noqa: F401  ทีม 10 Level Keepers (price action S/R)
 from . import fibonacci_confluence  # noqa: F401  ทีม 11 Fib Confluence Desk (Fibonacci confluence)
+from . import momentum_scalper  # noqa: F401  ทีม 12 สายซิ่ง (M15/M5 scalping)
