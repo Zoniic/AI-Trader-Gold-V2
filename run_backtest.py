@@ -18,6 +18,7 @@ from config import load_settings
 from core.strategy import STRATEGY_REGISTRY
 from core.team_config import load_team_config
 from data.loader import load_price_data
+from execution.alerts import send_discord_alert
 from persistence.db import RunLogger
 from reporting.report import save_report
 from risk.position_sizing import RiskConfig
@@ -138,6 +139,13 @@ def main() -> None:
         config=json.dumps(config_snapshot, ensure_ascii=False),
     )
     print(f"[log] บันทึกทุก signal/decision/trade ลง: {settings.log_db_path} (run_id={run_id})")
+
+    if args.discord_alert:
+        send_discord_alert(
+            f"🟢 **เริ่ม backtest** — `{strategy.name}` timeframe={settings.timeframe} "
+            f"balance เริ่มต้น=${settings.initial_balance:,.2f} run_id={run_id}",
+            settings.discord_webhook_url_dry_run, level="info", dedupe_key=None,
+        )
 
     result = run_backtest(
         strategy, data, risk_cfg, cost,
