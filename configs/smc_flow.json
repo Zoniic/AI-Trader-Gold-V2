@@ -1,0 +1,21 @@
+{
+  "strategy_params": {
+    "swing_left": 3,
+    "swing_right": 3,
+    "sweep_lookback": 40,
+    "choch_window": 15,
+    "fvg_min_atr": 0.15,
+    "atr_period": 14,
+    "sl_buffer_atr": 0.4,
+    "min_engulf_body_ratio": 0.5
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": null,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": false
+  },
+  "notes": "แก้ค่าในไฟล์นี้แล้วรัน backtest ใหม่ได้เลย ทุก run บันทึก config ลง DB ให้ตามรอยได้"
+}

@@ -1,0 +1,30 @@
+{
+  "strategy_params": {
+    "swing_left": 3,
+    "swing_right": 3,
+    "sweep_lookback": 40,
+    "choch_window": 15,
+    "fvg_min_atr": 0.15,
+    "atr_period": 14,
+    "sl_buffer_atr": 0.4,
+    "min_engulf_body_ratio": 0.5
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": false,
+    "trailing_stop_r": null,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": false,
+    "cooldown_bars_after_loss": 3
+  },
+  "notes": "ทดลอง 4 รอบบน M30 (2023-2026): ระบบ SMC เต็มลำดับ HTF S/D → liquidity sweep → CHoCH → QML → FVG retest → engulfing → SL ใต้ sweep+ATR, TP ตาม structure | รอบ1 default: PF 1.10 (72 ไม้ WR 33%) กำไรตั้งแต่รอบแรก — หายากมากในทีมทดลอง | รอบ2 ใส่ snowball trailing: PF ร่วง 0.73 — ท่านี้ TP อยู่ที่ swing structure จริง ต้องปล่อยวิ่งถึงเป้า ห้าม trailing ตัดขา | รอบ3a TP structure ล้วนไม่มี management: PF 1.169 (70 ไม้) ← config นี้ | รอบ3b + regime trend/volatile: PF 1.46 แต่เหลือ 23 ไม้/3ปี น้อยเกินจะเชื่อถือสถิติ | รอบ4 partial@1R+BE: WR พุ่ง 54.8% แต่ PF เหลือ 1.04 — ยืนยันอีกครั้งว่าตัดขากำไรไม่คุ้ม | สรุป: PF 1.169 ผ่านเกณฑ์ portfolio ขั้นต่ำ (1.15) แบบเฉียดๆ ไม้เฉลี่ยแค่ ~23 ไม้/ปี (ไม้น้อยแต่คุณภาพ ตามธรรมชาติของ SMC ที่กรอง 6 ชั้น) H1 ใช้ไม่ได้ (PF 0.59) ⚠️ ก่อน live: ควรผ่าน walk-forward + holdout ก่อน และระวัง overfit เพราะไม้น้อย",
+  "risk": {
+    "risk_per_trade_pct": 0.75,
+    "max_daily_loss_pct": 2.5,
+    "max_weekly_loss_pct": 5.0,
+    "max_drawdown_pct": 15.0,
+    "sizing_mode": "fixed"
+  },
+  "allowed_regimes": null
+}
