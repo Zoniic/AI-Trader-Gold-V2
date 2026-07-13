@@ -35,7 +35,7 @@ from core.team_config import load_team_config
 from config import load_settings
 from data.mt5_loader import TIMEFRAME_MAP
 from execution.alerts import send_discord_alert
-from execution.broker import MT5Broker, NotDemoAccountError
+from execution.broker import MT5Broker, NotDemoAccountError, compute_magic
 from persistence.db import RunLogger, find_open_trade, load_gate_state, save_gate_state
 from risk.live_gate import GateState, check_gate, on_trade_closed, roll_calendar
 from risk.position_sizing import RiskConfig, RiskManager
@@ -114,6 +114,7 @@ class LiveTeam:
     manage_state: ManageState | None = None
     open_trade_id: int | None = None
     pending_close_attempts: int = 0
+    magic: int = 0
 
 
 def bootstrap_team(
@@ -167,6 +168,7 @@ def bootstrap_team(
         state=state,
         risk=RiskManager(risk_cfg), risk_cfg=risk_cfg, logger=logger,
         management=TradeManagement(**cfg["trade_management"]),
+        magic=compute_magic(team, tf),
     )
 
     # ไม้ที่เปิดค้างไว้ตอน process ตาย/restart ยังเปิดอยู่จริงใน MT5 แต่ LiveTeam ใหม่ไม่รู้จัก
@@ -177,7 +179,7 @@ def bootstrap_team(
     if not dry_run:
         open_row = find_open_trade(db_path, team, tf)
         if open_row is not None:
-            pos = broker.get_position(open_row["ticket"])
+            pos = broker.get_position(open_row["ticket"], expected_magic=lt.magic)
             if pos is not None:
                 direction = Direction.BUY if open_row["direction"] == "BUY" else Direction.SELL
                 lt.open_ticket = open_row["ticket"]
@@ -239,17 +241,65 @@ def poll_new_bar(broker: MT5Broker, lt: LiveTeam, symbol: str, lookback: int = 8
 PENDING_CLOSE_WARN_ATTEMPTS = 10  # ~5 นาทีที่ poll_interval=30s ก่อนแจ้งเตือนว่า deal history ยังไม่ขึ้น
 
 
+def _reconcile_dry_run(lt: LiveTeam, cost: CostModel) -> None:
+    """dry_run ไม่มี ticket จริงจาก MT5 ให้เช็ค ก่อนหน้านี้ reconcile_open_position() แค่ return
+    เฉยๆ ทำให้ current_price/floating_pnl ในหน้า dashboard ไม่เคยอัปเดตเลยตลอดทั้งไม้ (gap ที่เจอ
+    ตอน audit) และไม้ dry-run ไม่เคยปิดเองด้วย (ไม่มีอะไรเช็ค SL/TP ให้) เลย simulate ง่ายๆ ตรงนี้:
+    อัปเดตราคาจากแท่งล่าสุดทุกรอบ + เช็ค high/low ของแท่งล่าสุดว่าแตะ SL/TP หรือยัง (ไม่ simulate
+    intrabar exact เหมือน backtest 100% — พอสำหรับ dry-run ที่จุดประสงค์คือทดสอบ signal/flow ไม่ใช่
+    วัดผลลัพธ์ทางการเงินแม่นยำ)
+    """
+    if lt.open_trade_id is None or lt.df.empty:
+        return
+    meta = lt.open_entry_meta
+    direction: Direction | None = meta.get("direction")
+    entry = meta.get("entry")
+    sl = meta.get("sl")
+    tp = meta.get("tp")
+    lot = meta.get("lot")
+    if direction is None or entry is None or sl is None or tp is None or lot is None:
+        return
+
+    bar = lt.df.iloc[-1]
+    sign = direction.sign
+    current_price = float(bar["close"])
+    floating_pnl = (current_price - entry) * sign * lot * cost.point_value
+    lt.logger.update_open_trade(lt.open_trade_id, current_price, floating_pnl)
+
+    high, low = float(bar["high"]), float(bar["low"])
+    hit_sl = low <= sl if sign > 0 else high >= sl
+    hit_tp = high >= tp if sign > 0 else low <= tp
+    if not (hit_sl or hit_tp):
+        return
+    exit_price = sl if hit_sl else tp  # ถ้าแตะทั้งคู่ในแท่งเดียวกัน ประมาณว่าโดน SL ก่อน (อนุรักษ์นิยม)
+    pnl = (exit_price - entry) * sign * lot * cost.point_value
+    outcome = "sl" if hit_sl else "tp"
+    exit_idx = len(lt.df) - 1
+    lt.logger.log_trade_close(
+        lt.open_trade_id, exit_time=lt.df.index[exit_idx], exit_price=exit_price, pnl=pnl, outcome=outcome,
+    )
+    on_trade_closed(lt.state, pnl, exit_idx, lt.cfg.get("trade_management", {}).get("cooldown_bars_after_loss", 0))
+    print(f"[live-dry] {lt.team}:{lt.timeframe} (จำลอง) ไม้ปิดแล้ว outcome={outcome} pnl={pnl:.2f} "
+          f"balance={lt.state.balance:.2f}", flush=True)
+    lt.open_ticket = None
+    lt.open_signal_id = None
+    lt.open_entry_meta = {}
+    lt.manage_state = None
+    lt.open_trade_id = None
+
+
 def reconcile_open_position(
-    broker: MT5Broker, lt: LiveTeam, dry_run: bool, discord_webhook_url: str | None = None,
+    broker: MT5Broker, lt: LiveTeam, dry_run: bool, cost: CostModel, discord_webhook_url: str | None = None,
 ) -> None:
     """เช็ค position ที่เปิดค้างไว้ ถ้ายังเปิดอยู่ อัปเดตราคาปัจจุบัน/กำไรลอย
     ถ้าปิดไปแล้ว (โดน SL/TP จริงใน MT5) ดึง pnl มาอัปเดต state + log
     """
+    if dry_run:
+        _reconcile_dry_run(lt, cost)
+        return
     if lt.open_ticket is None:
         return
-    if dry_run:
-        return  # dry_run ไม่มี ticket จริงใน MT5 ให้เช็ค
-    pos = broker.get_position(lt.open_ticket)
+    pos = broker.get_position(lt.open_ticket, expected_magic=lt.magic)
     if pos is not None:
         if lt.open_trade_id is not None:
             lt.logger.update_open_trade(lt.open_trade_id, float(pos.price_current), float(pos.profit))
@@ -312,7 +362,7 @@ def manage_open_position(broker: MT5Broker, lt: LiveTeam, symbol: str, dry_run: 
         partial_hit = high >= m.partial_level if sign > 0 else low <= m.partial_level
         if partial_hit:
             close_vol = round(m.lot * mgmt.partial_fraction, 2)
-            result = broker.close_position(symbol, lt.open_ticket, volume=close_vol)
+            result = broker.close_position(symbol, lt.open_ticket, volume=close_vol, expected_magic=lt.magic)
             if result.success:
                 m.remaining_lot = round(m.remaining_lot - close_vol, 2)
                 m.partial_done = True
@@ -320,7 +370,7 @@ def manage_open_position(broker: MT5Broker, lt: LiveTeam, symbol: str, dry_run: 
                       f"เหลือ {m.remaining_lot} lot", flush=True)
                 if mgmt.move_sl_to_breakeven:
                     m.current_sl = m.entry
-                    broker.modify_sl_tp(symbol, lt.open_ticket, sl=m.current_sl)
+                    broker.modify_sl_tp(symbol, lt.open_ticket, sl=m.current_sl, expected_magic=lt.magic)
             else:
                 print(f"[live] {lt.team}:{lt.timeframe} partial TP ล้มเหลว: {result.message}", flush=True)
 
@@ -336,7 +386,7 @@ def manage_open_position(broker: MT5Broker, lt: LiveTeam, symbol: str, dry_run: 
                 m.current_sl = candidate_sl
                 m.trail_moved = True
                 new_tp = 0.0 if mgmt.remove_tp_when_trailing else None
-                result = broker.modify_sl_tp(symbol, lt.open_ticket, sl=m.current_sl, tp=new_tp)
+                result = broker.modify_sl_tp(symbol, lt.open_ticket, sl=m.current_sl, tp=new_tp, expected_magic=lt.magic)
                 if result.success:
                     tp_note = " (ลบ TP แล้ว — snowball โหมด)" if new_tp == 0.0 and not was_active else ""
                     print(f"[live] {lt.team}:{lt.timeframe} trailing SL เลื่อนไป {m.current_sl:.2f}{tp_note}",
@@ -350,8 +400,10 @@ def process_bar(
     broker: MT5Broker, lt: LiveTeam, symbol: str, cost: CostModel, dry_run: bool,
     discord_webhook_url: str | None = None,
 ) -> None:
-    if lt.open_ticket is not None:
-        return  # v1: ทีมละ 1 ไม้พร้อมกัน (ไม่ pyramiding) — กันความซับซ้อนของ partial-fill state
+    if lt.open_trade_id is not None:
+        return  # v1: ทีมละ 1 ไม้พร้อมกัน (ไม่ pyramiding) — เช็ค open_trade_id ไม่ใช่ open_ticket
+        # เพราะ dry_run ไม่มี ticket จริงจาก MT5 (เป็น None เสมอ) ถ้าเช็ค open_ticket ตรงนี้จะเปิดไม้ใหม่
+        # ทับไม้เดิมทุกแท่งใหม่ในโหมด dry-run (ดู comment ใน run() ตรง dispatch loop)
 
     data = MarketData(df=lt.df, symbol=symbol)
     idx = len(lt.df) - 1
@@ -397,7 +449,7 @@ def process_bar(
     )
     lt.logger.log_decision(signal_id, approved=True, reason=plan.reason, lot=plan.lot)
 
-    result = broker.send_order(symbol, signal.direction, plan.lot, signal.sl, signal.tp)
+    result = broker.send_order(symbol, signal.direction, plan.lot, signal.sl, signal.tp, magic=lt.magic)
     if not result.success:
         print(f"[live] {lt.team}:{lt.timeframe} ส่งออเดอร์ล้มเหลว: {result.message}", flush=True)
         return
@@ -485,9 +537,13 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
             cycle += 1
             for lt in teams:
                 try:
-                    reconcile_open_position(broker, lt, dry_run, discord_webhook_url=webhook)
+                    reconcile_open_position(broker, lt, dry_run, cost, discord_webhook_url=webhook)
                     if poll_new_bar(broker, lt, settings.symbol):
-                        if lt.open_ticket is not None:
+                        # open_trade_id (ไม่ใช่ open_ticket) คือตัวบ่งบอกว่า "มีไม้เปิดอยู่ไหม" ที่ถูกต้อง
+                        # ทั้ง dry-run และ live — dry_run ไม่มี ticket จริงจาก MT5 (send_order คืน
+                        # ticket=None เสมอ) ถ้าเช็ค open_ticket ตรงนี้ dry-run จะไม่รู้ตัวว่ามีไม้เปิดอยู่
+                        # แล้วเข้า process_bar ซ้ำทุกแท่งใหม่ (เปิดไม้ใหม่ทับไม้เดิมที่ยังไม่ปิดใน DB ตลอดไป)
+                        if lt.open_trade_id is not None:
                             manage_open_position(broker, lt, settings.symbol, dry_run)
                         else:
                             process_bar(broker, lt, settings.symbol, cost, dry_run, discord_webhook_url=webhook)

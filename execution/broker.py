@@ -9,9 +9,19 @@
 """
 from __future__ import annotations
 
+import zlib
 from dataclasses import dataclass
 
 from core.signal import Direction
+
+
+def compute_magic(team: str, timeframe: str) -> int:
+    """สร้างเลข magic คงที่ต่อ (team, timeframe) — ผูกไม้ที่ยิงเข้า MT5 กับทีมที่เปิดมันไว้
+    กันเคส (หายากมาก แต่ไม่เป็นไปไม่ได้) ที่ MT5 reuse ticket number แล้วทีมอื่นดันเผลอไปอ่าน/แก้
+    position ของ ticket เดิมที่กลายเป็นของคนละไม้แล้ว — get_position()/close_position()/
+    modify_sl_tp() เช็ค magic ให้ตรงก่อนเสมอถ้ามีการส่ง expected_magic เข้ามา
+    """
+    return zlib.crc32(f"{team}_{timeframe}".encode()) & 0x7FFFFFFF
 
 
 class NotDemoAccountError(Exception):
@@ -58,7 +68,7 @@ class MT5Broker:
             )
 
     def send_order(
-        self, symbol: str, direction: Direction, lot: float, sl: float, tp: float
+        self, symbol: str, direction: Direction, lot: float, sl: float, tp: float, magic: int = 0,
     ) -> OrderResult:
         if not self._connected:
             raise RuntimeError("ยังไม่ได้ connect() สำเร็จ")
@@ -84,6 +94,7 @@ class MT5Broker:
             "sl": sl,
             "tp": tp,
             "deviation": 10,
+            "magic": magic,
             "type_filling": mt5.ORDER_FILLING_IOC,
         }
         result = mt5.order_send(request)
@@ -91,7 +102,24 @@ class MT5Broker:
             return OrderResult(success=False, message=f"order_send ล้มเหลว: {result}")
         return OrderResult(success=True, ticket=result.order, message="ok")
 
-    def close_position(self, symbol: str, ticket: int, volume: float | None = None) -> OrderResult:
+    def _get_position_checked(self, ticket: int, expected_magic: int | None):
+        """ดึง position แล้วเช็ค magic ให้ตรงถ้าระบุ expected_magic มา — กัน ticket ที่ MT5
+        เผลอ reuse แล้วกลายเป็นของทีมอื่นไปแล้วโดยไม่รู้ตัว (ดู compute_magic ด้านบน)
+        """
+        positions = self._mt5.positions_get(ticket=ticket)
+        if not positions:
+            return None
+        pos = positions[0]
+        if expected_magic is not None and getattr(pos, "magic", None) not in (None, 0, expected_magic):
+            print(f"[broker] คำเตือน: ticket={ticket} magic={pos.magic} ไม่ตรงกับที่คาดไว้ "
+                  f"({expected_magic}) — น่าจะเป็น ticket reuse ปฏิเสธการดำเนินการนี้เพื่อความปลอดภัย",
+                  flush=True)
+            return None
+        return pos
+
+    def close_position(
+        self, symbol: str, ticket: int, volume: float | None = None, expected_magic: int | None = None,
+    ) -> OrderResult:
         """ปิด position — ถ้าไม่ระบุ volume ปิดทั้งไม้ ถ้าระบุ (< volume เดิม) = ปิดบางส่วน (partial TP)"""
         if not self._connected:
             raise RuntimeError("ยังไม่ได้ connect() สำเร็จ")
@@ -103,10 +131,9 @@ class MT5Broker:
             return OrderResult(success=True, ticket=ticket, message="dry_run")
 
         mt5 = self._mt5
-        positions = mt5.positions_get(ticket=ticket)
-        if not positions:
-            return OrderResult(success=False, message=f"ไม่พบ position ticket={ticket}")
-        pos = positions[0]
+        pos = self._get_position_checked(ticket, expected_magic)
+        if pos is None:
+            return OrderResult(success=False, message=f"ไม่พบ position ticket={ticket} (หรือ magic ไม่ตรง)")
         close_volume = round(min(volume, pos.volume), 2) if volume is not None else pos.volume
         close_type = mt5.ORDER_TYPE_SELL if pos.type == mt5.ORDER_TYPE_BUY else mt5.ORDER_TYPE_BUY
         tick = mt5.symbol_info_tick(symbol)
@@ -127,7 +154,8 @@ class MT5Broker:
         return OrderResult(success=True, ticket=result.order, message="ok")
 
     def modify_sl_tp(
-        self, symbol: str, ticket: int, sl: float | None = None, tp: float | None = None
+        self, symbol: str, ticket: int, sl: float | None = None, tp: float | None = None,
+        expected_magic: int | None = None,
     ) -> OrderResult:
         """แก้ SL/TP ของ position ที่เปิดอยู่ — ใช้สำหรับ trailing stop / เลื่อน SL ไป breakeven /
         ยกเลิก TP ตอน snowball (ส่ง tp=0.0 เพื่อลบ TP ทิ้ง) ค่าที่ไม่ส่ง (None) = คงค่าเดิมไว้
@@ -141,10 +169,9 @@ class MT5Broker:
             return OrderResult(success=True, ticket=ticket, message="dry_run")
 
         mt5 = self._mt5
-        positions = mt5.positions_get(ticket=ticket)
-        if not positions:
-            return OrderResult(success=False, message=f"ไม่พบ position ticket={ticket}")
-        pos = positions[0]
+        pos = self._get_position_checked(ticket, expected_magic)
+        if pos is None:
+            return OrderResult(success=False, message=f"ไม่พบ position ticket={ticket} (หรือ magic ไม่ตรง)")
         request = {
             "action": mt5.TRADE_ACTION_SLTP,
             "symbol": symbol,
@@ -193,11 +220,12 @@ class MT5Broker:
         positions = self._mt5.positions_get(symbol=symbol)
         return list(positions) if positions else []
 
-    def get_position(self, ticket: int):
-        """คืน position object ของ MT5 ถ้ายังเปิดอยู่ ไม่งั้นคืน None (ไม้ปิดไปแล้ว)"""
+    def get_position(self, ticket: int, expected_magic: int | None = None):
+        """คืน position object ของ MT5 ถ้ายังเปิดอยู่ ไม่งั้นคืน None (ไม้ปิดไปแล้ว)
+        ถ้าระบุ expected_magic จะเช็คด้วยว่า magic ตรงกัน ไม่งั้นถือว่าไม่ใช่ไม้ของเรา (ticket reuse)
+        """
         self._assert_demo()
-        positions = self._mt5.positions_get(ticket=ticket)
-        return positions[0] if positions else None
+        return self._get_position_checked(ticket, expected_magic)
 
     def get_closed_deal_pnl(self, ticket: int) -> float | None:
         """หลัง position ปิดแล้ว ดึงกำไร/ขาดทุนจริงจาก deal history — คืน None ถ้ายังหาไม่เจอ"""
