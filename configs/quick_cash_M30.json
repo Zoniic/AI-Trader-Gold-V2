@@ -1,0 +1,36 @@
+{
+  "strategy_params": {
+    "breakout_period": 20,
+    "min_body_ratio": 0.7,
+    "atr_period": 14,
+    "atr_mult_sl": 1.0,
+    "atr_mult_tp": 2.0,
+    "min_atr_pct": 0.05
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.5,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": true,
+    "cooldown_bars_after_loss": 4
+  },
+  "notes": "ทดลอง 9 รอบ: เป้า = สายซิ่งเข้าไว-ออกไวเก็บกำไรเรื่อยๆ | รอบ1-2 เข้าแบบ burst breakout (ตามแรงทะลุ 10-bar extreme): ล้มเหลวหนัก PF 0.15-0.57 โดน mean-reversion ของ gold TF เล็กสวนทันที | รอบ3 เปลี่ยนหัวใจเป็น pullback-resume ตามเทรนด์ EMA50: M30 ดีขึ้นชัด WR 58.4% | รอบ4 ออกไว partial 0.8R: PF 0.855 รอดครบ 3 ปีแต่ยังขาดทุน | รอบ5-6 ใช้ snowball แชมป์ (BE + trailing 1.5R + ลบ TP) + regime trend/volatile + บล็อกชม. 5,6,8: PF 1.056 กำไรครั้งแรก (+6%/3ปี, 369 ไม้, ไม่โดน kill-switch) | รอบ7 ลองกลับไปออกไว partial 0.8R บนฐานที่กำไร: พังทันที PF 0.796 โดน kill-switch — พิสูจน์ว่า “การออกไว” คือตัวฆ่ากำไรของท่านี้ ไม่ใช่ตัวช่วย | รอบ8 เข้มคุณภาพแท่ง: เท่าเดิม | บทสรุปตรงๆ: ทีมนี้กำไรได้เฉพาะเมื่อ “เข้าไว แต่ออกช้า” (snowball) — ขัดกับคอนเซปต์ซิ่งเก็บสั้นที่ตั้งใจ และ PF 1.056 ยังต่ำกว่ามาตรฐาน portfolio (ทีมหลัก PF 1.14+) ⚠️ ยังไม่แนะนำใส่ portfolio/live จนกว่า PF จะเกิน 1.15 อย่างสม่ำเสมอ — ถ้าอยากซิ่งจริง ใช้ทีมนี้เป็นฐานแล้วรอข้อมูล tick/volume มาเสริมการเข้า",
+  "risk": {
+    "risk_per_trade_pct": 0.5,
+    "max_daily_loss_pct": 2.0,
+    "max_weekly_loss_pct": 4.0,
+    "max_drawdown_pct": 15.0,
+    "sizing_mode": "fixed"
+  },
+  "allowed_regimes": [
+    "trend",
+    "volatile"
+  ],
+  "blocked_hours": [
+    5,
+    6,
+    8
+  ]
+}

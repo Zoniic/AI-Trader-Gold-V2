@@ -1,0 +1,36 @@
+{
+  "strategy_params": {
+    "breakout_period": 20,
+    "min_body_ratio": 0.7,
+    "atr_period": 14,
+    "atr_mult_sl": 1.0,
+    "atr_mult_tp": 2.0,
+    "min_atr_pct": 0.05
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.5,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": true,
+    "cooldown_bars_after_loss": 4
+  },
+  "notes": "รัน config กำไรของ M30 บน M15: WR 17% PF 0.29 kill-switch ภายใน 2 เดือน — สอดคล้องกับทุกทีมก่อนหน้า (M15 ต้นทุนกิน + noise สวน) ⚠️ ห้ามใช้ M15 กับท่านี้เด็ดขาด",
+  "risk": {
+    "risk_per_trade_pct": 0.5,
+    "max_daily_loss_pct": 2.0,
+    "max_weekly_loss_pct": 4.0,
+    "max_drawdown_pct": 15.0,
+    "sizing_mode": "fixed"
+  },
+  "allowed_regimes": [
+    "trend",
+    "volatile"
+  ],
+  "blocked_hours": [
+    5,
+    6,
+    8
+  ]
+}

@@ -16,3 +16,4 @@ from . import sr_bounce  # noqa: F401  ทีม 10 Level Keepers (price action 
 from . import fibonacci_confluence  # noqa: F401  ทีม 11 Fib Confluence Desk (Fibonacci confluence)
 from . import momentum_scalper  # noqa: F401  ทีม 12 สายซิ่ง (M15/M5 scalping)
 from . import rule_breaker  # noqa: F401  ทีม 13 นอกคอก (high win rate, R:R กลับหัว)
+from . import quick_cash  # noqa: F401  ทีม 14 เก็บเงินด่วน (สายซิ่งมีวินัย burst momentum)
