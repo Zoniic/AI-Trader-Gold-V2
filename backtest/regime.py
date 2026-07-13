@@ -55,6 +55,41 @@ def compute_atr_ratio(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return atr / df["close"]
 
 
+def _apply_hysteresis(raw_regime: pd.Series, confirm_bars: int) -> pd.Series:
+    """กัน flip-flop ที่ threshold: ป้าย regime ใหม่จะ "ยืนยัน" (เปลี่ยนจริง) ก็ต่อเมื่อ raw
+    classification เป็นค่าเดิมติดต่อกันครบ confirm_bars แท่ง ไม่งั้นยังคงป้ายเดิมไว้ก่อน
+
+    ADX/ATR percentile เป็น lagging indicator โดยธรรมชาติ — ไม่มี hysteresis จะทำให้ป้าย regime
+    สั่นไปมาเวลาค่าแกว่งอยู่ใกล้ threshold พอดี (เช่น ADX แกว่งรอบๆ 25) ทำให้ allowed_regimes gate
+    เปิด/ปิดถี่เกินจริง confirm_bars=1 (ค่าเริ่มต้น) = ไม่มี hysteresis เลย พฤติกรรมเดิมเป๊ะ
+    """
+    if confirm_bars <= 1 or len(raw_regime) == 0:
+        return raw_regime
+
+    values = raw_regime.to_numpy()
+    out = values.copy()
+    confirmed = values[0]
+    candidate = None
+    candidate_count = 0
+    for i in range(len(values)):
+        label = values[i]
+        if label == confirmed:
+            candidate = None
+            candidate_count = 0
+        else:
+            if label == candidate:
+                candidate_count += 1
+            else:
+                candidate = label
+                candidate_count = 1
+            if candidate_count >= confirm_bars:
+                confirmed = candidate
+                candidate = None
+                candidate_count = 0
+        out[i] = confirmed
+    return pd.Series(out, index=raw_regime.index)
+
+
 def compute_regime(
     df: pd.DataFrame,
     adx_period: int = 14,
@@ -63,11 +98,15 @@ def compute_regime(
     volatile_percentile: float = VOLATILE_PERCENTILE,
     low_vol_percentile: float = LOW_VOL_PERCENTILE,
     percentile_lookback: int = PERCENTILE_LOOKBACK,
+    confirm_bars: int = 1,
 ) -> pd.Series:
     """คืน Series ค่า 'trend' / 'range' / 'volatile' / 'low_volatility' index ตรงกับ df
 
     ลำดับความสำคัญ: volatile > trend > low_volatility > range
     (ผันผวนสูงสำคัญกว่าทิศทาง เช่นตอนข่าวแรง; ตลาดหลับก็ต้องรู้เพราะสเปรดกินกำไรสัดส่วนสูง)
+
+    confirm_bars: จำนวนแท่งที่ raw classification ต้องคงที่ก่อนป้าย regime จะเปลี่ยนจริง (hysteresis)
+    ค่าเริ่มต้น 1 = ไม่มี hysteresis (พฤติกรรมเดิม) ตั้งสูงขึ้น (เช่น 3) เพื่อกัน flip-flop ที่ threshold
     """
     adx = compute_adx(df, adx_period)
     atr_ratio = compute_atr_ratio(df, atr_period)
@@ -79,4 +118,4 @@ def compute_regime(
     regime[(atr_ratio <= low_threshold) & (adx < trend_adx_threshold)] = "low_volatility"
     regime[adx >= trend_adx_threshold] = "trend"
     regime[atr_ratio >= vol_threshold] = "volatile"
-    return regime
+    return _apply_hysteresis(regime, confirm_bars)

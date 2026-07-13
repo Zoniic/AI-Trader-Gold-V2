@@ -6,3 +6,5 @@ python-dotenv>=1.0
 MetaTrader5>=5.0.45 ; platform_system == "Windows"
 streamlit>=1.36
 pytest>=7.4
+requests>=2.31
+scipy>=1.11

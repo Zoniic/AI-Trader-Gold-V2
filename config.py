@@ -39,6 +39,7 @@ class Settings:
     max_drawdown_pct: float
     spread_points: float
     slippage_points: float
+    discord_webhook_url: str | None
     mt5: MT5Credentials
 
 
@@ -62,6 +63,7 @@ def load_settings() -> Settings:
         max_drawdown_pct=_env_float("MAX_DRAWDOWN_PCT", 20.0),
         spread_points=_env_float("SPREAD_POINTS", 30.0),
         slippage_points=_env_float("SLIPPAGE_POINTS", 5.0),
+        discord_webhook_url=os.getenv("DISCORD_WEBHOOK_URL") or None,
         mt5=MT5Credentials(
             login=int(mt5_login) if mt5_login else None,
             password=os.getenv("MT5_PASSWORD"),

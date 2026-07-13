@@ -65,7 +65,6 @@ def simulate_live_path(
     regime_series = compute_regime(df)
     allowed = set(cfg.get("allowed_regimes")) if cfg.get("allowed_regimes") else None
     blocked_hr = set(cfg.get("blocked_hours")) if cfg.get("blocked_hours") else None
-    round_trip_cost = cost.round_trip_cost()
 
     tr = pd.concat(
         [df["high"] - df["low"], (df["high"] - df["close"].shift(1)).abs(),
@@ -115,6 +114,9 @@ def simulate_live_path(
         exit_idx, parts, outcome, mae_r, mfe_r = _simulate_trade(
             df, idx + 1, signal.direction, signal.entry, signal.sl, signal.tp, max_hold=100, management=mgmt,
         )
+        # ต้องใช้สูตรต้นทุนเดียวกับ backtest/engine.py เป๊ะ (session/volatility-aware) ไม่งั้น balance
+        # path ที่ simulate ในนี้จะเพี้ยนจาก backtest จริง ทำให้ gate decision ถัดๆ ไปเทียบ parity ผิด
+        round_trip_cost = cost.round_trip_cost_at(bar_time.hour, atr_now, atr_med)
         pnl = sum(
             (signal.direction.sign * (exit_price - signal.entry) - round_trip_cost)
             * fraction * plan.lot * risk_cfg.contract_size

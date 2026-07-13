@@ -253,7 +253,6 @@ def run_backtest(
     atr_median_series = atr_series.rolling(500, min_periods=50).median()
 
     risk = RiskManager(risk_cfg)
-    round_trip_cost = cost.round_trip_cost()
     state = GateState(balance=risk_cfg.account_balance)
 
     trades: list[Trade] = []
@@ -375,6 +374,9 @@ def run_backtest(
             df, entry_idx + 1, signal.direction, signal.entry, signal.sl, signal.tp, max_hold, management
         )
 
+        # ต้นทุนปรับตาม session (ชั่วโมง UTC ของแท่งที่เข้าไม้) + volatility regime ณ ตอนนั้น —
+        # แทนที่ round_trip_cost คงที่ตัวเดียวตลอด backtest (เดิมไม่เคยรู้จักคำว่า "spread กระโดด")
+        round_trip_cost = cost.round_trip_cost_at(bar_time.hour, atr_now, atr_med)
         risk_dist = abs(signal.entry - signal.sl)
         pnl = sum(
             (signal.direction.sign * (exit_price - signal.entry) - round_trip_cost)

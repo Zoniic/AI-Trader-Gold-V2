@@ -92,6 +92,25 @@ CREATE TABLE IF NOT EXISTS orders (
     message TEXT,
     created_at TEXT DEFAULT (datetime('now'))
 );
+
+-- gate_state: เก็บ risk/live_gate.py::GateState ข้าม process restart — คีย์ด้วย (team, timeframe)
+-- ไม่ใช่ run_id เพราะ run_id เปลี่ยนทุกครั้งที่ live_runner restart แต่ cooldown/probation/peak_balance
+-- ต้อง "จำ" ข้ามการ restart ถึงจะมีความหมาย (ก่อนหน้านี้อยู่ใน memory ล้วนๆ รีเซ็ตทุกครั้งที่ process ตาย)
+CREATE TABLE IF NOT EXISTS gate_state (
+    team TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    balance REAL NOT NULL,
+    peak_balance REAL NOT NULL,
+    cal_date TEXT,
+    cal_week TEXT,
+    day_start_balance REAL,
+    week_start_balance REAL,
+    cooldown_until INTEGER,
+    in_probation INTEGER NOT NULL DEFAULT 0,
+    probation_events INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (team, timeframe)
+);
 """
 
 
@@ -364,3 +383,68 @@ def get_signals(db_path: str, run_id: str) -> pd.DataFrame:
         return pd.read_sql_query(
             "SELECT * FROM signals WHERE run_id = ? ORDER BY bar_time", conn, params=(run_id,)
         )
+
+
+def save_gate_state(db_path: str, team: str, timeframe: str, state) -> None:
+    """บันทึก GateState (cooldown/probation/peak_balance) ข้าม process restart — คีย์ (team, timeframe)
+    เรียกทุกรอบ poll จาก live_runner.py กันไม่ให้การป้องกันความเสี่ยงหายไปตอน process ตาย/restart
+    """
+    import json as _json
+
+    # ตั้งชื่อคอลัมน์ cal_date/cal_week (ไม่ใช่ current_date/current_week) เพราะ CURRENT_DATE เป็น
+    # keyword พิเศษของ SQLite (literal-value token คืนวันที่วันนี้) — ใช้ current_date เป็นชื่อคอลัมน์
+    # ตรงๆ ทำให้ SQLite แอบแทนที่ค่าที่ INSERT ด้วยวันที่ปัจจุบันเงียบๆ แทนที่จะเก็บค่าที่ส่งมาจริง
+    # (เจอบั๊กนี้ตอนเขียน — ทดสอบแล้วว่า rename แก้ได้เด็ดขาด)
+    _ensure_schema(db_path)
+    with _connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO gate_state (team, timeframe, balance, peak_balance, cal_date, "
+            "cal_week, day_start_balance, week_start_balance, cooldown_until, in_probation, "
+            "probation_events, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now')) "
+            "ON CONFLICT(team, timeframe) DO UPDATE SET "
+            "balance=excluded.balance, peak_balance=excluded.peak_balance, "
+            "cal_date=excluded.cal_date, cal_week=excluded.cal_week, "
+            "day_start_balance=excluded.day_start_balance, week_start_balance=excluded.week_start_balance, "
+            "cooldown_until=excluded.cooldown_until, in_probation=excluded.in_probation, "
+            "probation_events=excluded.probation_events, updated_at=datetime('now')",
+            (
+                team, timeframe, state.balance, state.peak_balance,
+                state.current_date.isoformat() if state.current_date else None,
+                _json.dumps(list(state.current_week)) if state.current_week else None,
+                state.day_start_balance, state.week_start_balance,
+                state.cooldown_until, int(state.in_probation), state.probation_events,
+            ),
+        )
+        conn.commit()
+
+
+def load_gate_state(db_path: str, team: str, timeframe: str):
+    """โหลด GateState ที่บันทึกไว้ล่าสุดของ (team, timeframe) — คืน None ถ้าไม่เคยมี (ทีมใหม่)"""
+    import json as _json
+    from datetime import date as _date
+
+    from risk.live_gate import GateState
+
+    _ensure_schema(db_path)
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT balance, peak_balance, cal_date, cal_week, day_start_balance, "
+            "week_start_balance, cooldown_until, in_probation, probation_events "
+            "FROM gate_state WHERE team = ? AND timeframe = ?",
+            (team, timeframe),
+        ).fetchone()
+    if row is None:
+        return None
+    (balance, peak_balance, cal_date_str, cal_week_str, day_start_balance,
+     week_start_balance, cooldown_until, in_probation, probation_events) = row
+    return GateState(
+        balance=balance,
+        peak_balance=peak_balance,
+        current_date=_date.fromisoformat(cal_date_str) if cal_date_str else None,
+        current_week=tuple(_json.loads(cal_week_str)) if cal_week_str else None,
+        day_start_balance=day_start_balance or 0.0,
+        week_start_balance=week_start_balance or 0.0,
+        cooldown_until=cooldown_until if cooldown_until is not None else -1,
+        in_probation=bool(in_probation),
+        probation_events=probation_events or 0,
+    )

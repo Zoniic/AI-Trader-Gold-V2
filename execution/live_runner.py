@@ -34,8 +34,9 @@ from core.strategy import STRATEGY_REGISTRY, Strategy
 from core.team_config import load_team_config
 from config import load_settings
 from data.mt5_loader import TIMEFRAME_MAP
+from execution.alerts import send_discord_alert
 from execution.broker import MT5Broker, NotDemoAccountError
-from persistence.db import RunLogger
+from persistence.db import RunLogger, load_gate_state, save_gate_state
 from risk.live_gate import GateState, check_gate, on_trade_closed, roll_calendar
 from risk.position_sizing import RiskConfig, RiskManager
 import strategies  # noqa: F401 เติม registry
@@ -141,10 +142,28 @@ def bootstrap_team(
     logger = RunLogger(db_path, run_id=run_id)
     logger.start_run(team, account_balance, timeframe=tf, config=json.dumps(cfg, ensure_ascii=False))
 
+    # โหลด GateState เดิม (cooldown/probation/peak_balance) ที่บันทึกไว้ก่อน process ตาย/restart —
+    # ถ้าไม่เคยมี (ทีมใหม่) จะได้ None แล้วสร้างสถานะเปล่าตามปกติ balance ใช้ค่าจาก broker เสมอ
+    # (ground truth ปัจจุบัน) แต่ peak_balance/cooldown/probation ต้อง "จำ" ต่อจากเดิมถึงจะมีความหมาย
+    saved_state = load_gate_state(db_path, team, tf)
+    if saved_state is not None:
+        saved_state.balance = account_balance
+        # cooldown_until เป็น bar-index สัมพัทธ์กับ DataFrame ของ process เดิม — พอ restart แล้ว
+        # bootstrap ใหม่ index จะเริ่มนับใหม่ ตัวเลขเดิมจึงไม่มีความหมาย (อาจทำให้ cooldown ค้างตลอดไป
+        # หรือหลุดก่อนเวลาแบบสุ่ม) ปลอดภัยกว่าคือรีเซ็ตเป็น -1 (ไม่มี cooldown ค้าง) แล้วให้ cooldown รอบ
+        # ใหม่ทำงานตามปกติเมื่อแพ้ไม้ถัดไป — ส่วน peak_balance/probation/day-week balance restore ได้
+        # ปลอดภัยเพราะอิงปฏิทิน/เงินจริง ไม่ใช่ bar-index
+        saved_state.cooldown_until = -1
+        state = saved_state
+        print(f"[live] {team}:{tf} โหลด GateState เดิมกลับมา — peak_balance={state.peak_balance:.2f} "
+              f"in_probation={state.in_probation} probation_events={state.probation_events}", flush=True)
+    else:
+        state = GateState(balance=account_balance)
+
     return LiveTeam(
         team=team, timeframe=tf, strategy=strat, cfg=cfg, df=df,
         last_bar_time=df.index[-1],
-        state=GateState(balance=account_balance),
+        state=state,
         risk=RiskManager(risk_cfg), risk_cfg=risk_cfg, logger=logger,
         management=TradeManagement(**cfg["trade_management"]),
     )
@@ -260,7 +279,10 @@ def manage_open_position(broker: MT5Broker, lt: LiveTeam, symbol: str, dry_run: 
                           flush=True)
 
 
-def process_bar(broker: MT5Broker, lt: LiveTeam, symbol: str, cost: CostModel, dry_run: bool) -> None:
+def process_bar(
+    broker: MT5Broker, lt: LiveTeam, symbol: str, cost: CostModel, dry_run: bool,
+    discord_webhook_url: str | None = None,
+) -> None:
     if lt.open_ticket is not None:
         return  # v1: ทีมละ 1 ไม้พร้อมกัน (ไม่ pyramiding) — กันความซับซ้อนของ partial-fill state
 
@@ -279,6 +301,12 @@ def process_bar(broker: MT5Broker, lt: LiveTeam, symbol: str, cost: CostModel, d
     )
     if gate.halted:
         print(f"[live] {lt.team}:{lt.timeframe} kill-switch: {gate.reason} — หยุดเทรดทีมนี้ถาวร", flush=True)
+        send_discord_alert(
+            f"🛑 **Kill-switch ทำงาน** — `{lt.team}:{lt.timeframe}` หยุดเทรดถาวร\nเหตุผล: {gate.reason}\n"
+            f"Balance ปัจจุบัน: ${lt.state.balance:.2f}",
+            discord_webhook_url, level="critical",
+            dedupe_key=f"killswitch_{lt.team}_{lt.timeframe}", dedupe_seconds=3600,
+        )
         return
     if not gate.ok:
         return
@@ -353,12 +381,18 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
     print(f"[live] เชื่อมต่อ MT5 สำเร็จ — dry_run={dry_run} roster={roster}", flush=True)
     account_balance = broker.account_balance() if not dry_run else settings.initial_balance
     cost = CostModel(spread_points=settings.spread_points, slippage_points=settings.slippage_points)
+    webhook = settings.discord_webhook_url
 
     teams = [
         bootstrap_team(broker, team, tf, settings.symbol, account_balance, settings.log_db_path)
         for team, tf in roster
     ]
     print(f"[live] bootstrap เสร็จ {len(teams)} ทีม เริ่ม poll ทุก {poll_interval}s (Ctrl+C หยุด)", flush=True)
+    send_discord_alert(
+        f"🟢 **live_runner เริ่มทำงาน** — mode={'LIVE' if not dry_run else 'DRY-RUN'} "
+        f"{len(teams)} ทีม balance=${account_balance:.2f}",
+        webhook, level="info", dedupe_key=None,
+    )
 
     cycle = 0
     try:
@@ -371,14 +405,26 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
                         if lt.open_ticket is not None:
                             manage_open_position(broker, lt, settings.symbol, dry_run)
                         else:
-                            process_bar(broker, lt, settings.symbol, cost, dry_run)
+                            process_bar(broker, lt, settings.symbol, cost, dry_run, discord_webhook_url=webhook)
                     # อัปเดต heartbeat ทุกรอบ poll (ไม่ใช่แค่ตอนมีแท่งใหม่ปิด) — เพื่อให้ dashboard
                     # รู้ว่า process ยังมีชีวิตอยู่จริง แม้ timeframe ยาว (H1) ที่กว่าแท่งจะปิดใหม่นานเป็นชม.
                     lt.logger.update_heartbeat()
-                except NotDemoAccountError:
+                    # บันทึก GateState ทุกรอบ poll ด้วย (ถูกๆ แค่ upsert แถวเดียว) กัน state หายตอน
+                    # process ตาย/restart กะทันหัน — ดู bootstrap_team() ที่โหลดกลับตอน start
+                    save_gate_state(settings.log_db_path, lt.team, lt.timeframe, lt.state)
+                except NotDemoAccountError as exc:
+                    send_discord_alert(
+                        f"🚨 **CRITICAL: บัญชีไม่ใช่ demo** — {exc}\nระบบหยุดทำงานทันทีเพื่อความปลอดภัย",
+                        webhook, level="critical", dedupe_key=None,
+                    )
                     raise
                 except Exception as exc:  # ทีมเดียวพังไม่ควรทำให้ทีมอื่นหยุด
                     print(f"[live] {lt.team}:{lt.timeframe} error: {exc}", flush=True)
+                    send_discord_alert(
+                        f"⚠️ **Error** — `{lt.team}:{lt.timeframe}`\n```{exc}```",
+                        webhook, level="warning",
+                        dedupe_key=f"error_{lt.team}_{lt.timeframe}", dedupe_seconds=1800,
+                    )
             if cycle % 20 == 0:  # heartbeat กันสงสัยว่า process ตายไปหรือยัง (ทุก ~cycle*poll_interval วิ)
                 print(
                     f"[live] heartbeat cycle={cycle} เวลา={datetime.now().strftime('%H:%M:%S')} "
@@ -388,6 +434,16 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
             time.sleep(poll_interval)
     except KeyboardInterrupt:
         print("[live] หยุดตามคำสั่งผู้ใช้", flush=True)
+        send_discord_alert("🟡 **live_runner หยุดทำงาน** (สั่งหยุดเอง — Ctrl+C)", webhook, level="warning", dedupe_key=None)
+    except NotDemoAccountError:
+        raise  # แจ้งเตือนไปแล้วในลูปด้านบน ไม่ต้องซ้ำ
+    except Exception as exc:
+        send_discord_alert(
+            f"🔴 **live_runner ล่ม!** — process หยุดทำงานโดยไม่คาดคิด\n```{exc}```\n"
+            f"ต้อง restart ด้วยตนเอง — ไม่มีการ auto-restart ในตัว process นี้",
+            webhook, level="critical", dedupe_key=None,
+        )
+        raise
     finally:
         for lt in teams:
             lt.logger.close()

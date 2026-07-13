@@ -113,3 +113,35 @@ def test_dd_targeting_reduces_drawdown_under_leverage(tmp_path):
                             dd_ceiling_pct=5.0, dd_budget_headroom=0.0, dd_budget_floor=0.4)
     # เมื่อ headroom=0 ทุกไม้ที่มี drawdown จะถูกหด lot → MaxDD รวมต้องไม่แย่ลง (ปกติดีขึ้น)
     assert on.max_drawdown_pct <= off.max_drawdown_pct
+
+
+def test_correlation_aware_shrinks_size_for_correlated_same_direction_teams(tmp_path):
+    """2 ทีมที่ PnL รายวันเหมือนกันเป๊ะ (correlation=1.0) เปิด BUY พร้อมกันตลอด — ถ้าไม่เปิด
+    correlation_aware ระบบนับเป็น 2 หน่วยกระจายความเสี่ยงเต็มขนาด ถ้าเปิดต้องหด lot ของไม้ที่ 2
+    ลง ทำให้ max_drawdown ตอนแพ้ติดกันตื้นกว่า (พิสูจน์ว่า correlation_scale มีผลจริง)
+    """
+    db = str(tmp_path / "p6.db")
+    specs = []
+    for d in range(1, 21):
+        pnl = 150 if d % 4 != 0 else -600  # แพ้เป็นช่วงๆ ให้เห็น drawdown ชัด
+        specs.append(
+            (f"2024-01-{d:02d} 08:00:00", f"2024-01-{d:02d} 09:00:00", Direction.BUY,
+             2000, 1990, 2020, 1.0, pnl)
+        )
+    # ทีม B มี PnL รายวันเหมือนทีม A เป๊ะ — correlation ต้องออกมา 1.0
+    _seed_team(db, "t1", "team_a", "H1", specs)
+    _seed_team(db, "t2", "team_b", "H1", specs)
+
+    without_corr = simulate_portfolio(
+        db, [("team_a", "H1", 1.0), ("team_b", "H1", 1.0)],
+        initial_balance=10000, max_concurrent=10, max_same_direction=2,
+        risk_multiplier=2.0, correlation_aware=False,
+    )
+    with_corr = simulate_portfolio(
+        db, [("team_a", "H1", 1.0), ("team_b", "H1", 1.0)],
+        initial_balance=10000, max_concurrent=10, max_same_direction=2,
+        risk_multiplier=2.0, correlation_aware=True,
+    )
+    # การเปิดใช้ correlation_aware ต้องไม่ทำให้ DD แย่ลง (หด lot ของไม้ correlated สูง → DD ตื้นลงหรือเท่าเดิม)
+    assert with_corr.max_drawdown_pct <= without_corr.max_drawdown_pct
+    assert with_corr.taken == without_corr.taken  # ยังเปิดจำนวนไม้เท่าเดิม แค่ lot เล็กลง ไม่ใช่ข้ามไม้

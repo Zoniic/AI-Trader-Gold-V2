@@ -1,6 +1,9 @@
+from datetime import date
+
 from backtest.engine import Trade
 from core.signal import Direction
-from persistence.db import RunLogger, get_decisions, get_trades, list_runs
+from persistence.db import RunLogger, get_decisions, get_trades, list_runs, load_gate_state, save_gate_state
+from risk.live_gate import GateState
 
 
 def test_start_and_finish_run_round_trip(tmp_path):
@@ -63,3 +66,35 @@ def test_list_runs_on_empty_db_returns_empty_dataframe(tmp_path):
     db_path = str(tmp_path / "empty.db")
     runs = list_runs(db_path)  # ยังไม่เคยมี RunLogger เขียนอะไรเลย
     assert runs.empty
+
+
+def test_gate_state_round_trip_survives_restart(tmp_path):
+    """จำลอง process ตาย/restart — บันทึก GateState แล้วโหลดกลับ ต้องได้ peak_balance/probation
+    /cooldown_events เหมือนเดิม (ยกเว้น cooldown_until ที่ต้องรีเซ็ตเป็น -1 เพราะ bar-index ไม่ portable
+    ข้าม process — ดู comment ใน execution/live_runner.py::bootstrap_team)
+    """
+    db_path = str(tmp_path / "gate.db")
+    state = GateState(balance=9500.0)
+    state.peak_balance = 10500.0
+    state.current_date = date(2026, 7, 10)
+    state.current_week = (2026, 28)
+    state.day_start_balance = 9800.0
+    state.week_start_balance = 10000.0
+    state.cooldown_until = 850  # ค่านี้ไม่ portable — คาดว่าจะหายหลังโหลดกลับ
+    state.in_probation = True
+    state.probation_events = 3
+
+    save_gate_state(db_path, "trend_pullback", "M30", state)
+    loaded = load_gate_state(db_path, "trend_pullback", "M30")
+
+    assert loaded is not None
+    assert loaded.peak_balance == 10500.0
+    assert loaded.current_date == date(2026, 7, 10)
+    assert loaded.current_week == (2026, 28)
+    assert loaded.day_start_balance == 9800.0
+    assert loaded.week_start_balance == 10000.0
+    assert loaded.in_probation is True
+    assert loaded.probation_events == 3
+
+    # ทีมที่ไม่เคยบันทึกมาก่อน (ทีมใหม่) ต้องได้ None ไม่ใช่ throw
+    assert load_gate_state(db_path, "never_seen_team", "H1") is None
