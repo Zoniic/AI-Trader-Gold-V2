@@ -54,6 +54,7 @@ def main() -> None:
     team_risk = team_cfg.get("risk") or {}
     risk_cfg = RiskConfig(
         account_balance=settings.initial_balance,
+        contract_size=settings.contract_size,
         risk_per_trade_pct=team_risk.get("risk_per_trade_pct", settings.risk_per_trade_pct),
         max_drawdown_pct=team_risk.get("max_drawdown_pct", settings.max_drawdown_pct),
         max_daily_loss_pct=team_risk.get("max_daily_loss_pct"),
@@ -64,7 +65,8 @@ def main() -> None:
         dd_budget_boost_cap=team_risk.get("dd_budget_boost_cap", 1.3),
         dd_budget_floor=team_risk.get("dd_budget_floor", 0.4),
     )
-    cost = CostModel(spread_points=settings.spread_points, slippage_points=settings.slippage_points)
+    cost = CostModel(spread_points=settings.spread_points, slippage_points=settings.slippage_points,
+                     point_value=settings.point_value)
 
     print(f"[config] ใช้ {team_cfg.get('_config_file', '(default)')} + management + regime gate เดียวกับ backtest")
     report = run_walkforward(

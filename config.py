@@ -39,6 +39,8 @@ class Settings:
     max_drawdown_pct: float
     spread_points: float
     slippage_points: float
+    point_value: float  # ขนาด 1 point เป็นหน่วยราคา (GOLD=0.01, EURUSD=0.00001)
+    contract_size: float  # ขนาดสัญญาต่อ 1 lot (GOLD=100 oz, EURUSD=100000)
     discord_webhook_url: str | None
     discord_webhook_url_dry_run: str | None
     mt5: MT5Credentials
@@ -64,6 +66,10 @@ def load_settings() -> Settings:
         max_drawdown_pct=_env_float("MAX_DRAWDOWN_PCT", 20.0),
         spread_points=_env_float("SPREAD_POINTS", 30.0),
         slippage_points=_env_float("SLIPPAGE_POINTS", 5.0),
+        # instrument spec ต่อสินทรัพย์ — ดีฟอลต์เป็นค่า GOLD (สินทรัพย์หลักเดิม) ถ้ารันสินทรัพย์อื่น
+        # ต้องตั้ง env ให้ตรงโบรก เช่น EURUSD: POINT_VALUE=0.00001 CONTRACT_SIZE=100000 SPREAD_POINTS=12
+        point_value=_env_float("POINT_VALUE", 0.01),
+        contract_size=_env_float("CONTRACT_SIZE", 100.0),
         discord_webhook_url=os.getenv("DISCORD_WEBHOOK_URL") or None,
         # webhook แยกกันตั้งใจ — dry-run/backtest กับ live ยิงเข้าคนละช่อง Discord กัน ไม่งั้นตอนทดสอบ
         # dry-run ถี่ๆ จะไปปนกับข้อความไม้จริงในช่องเดียวกัน ทำให้แยกไม่ออกว่าอันไหนเงินจริง

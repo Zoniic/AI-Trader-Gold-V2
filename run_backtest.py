@@ -88,6 +88,7 @@ def main() -> None:
     team_risk = team_cfg.get("risk") or {}
     risk_cfg = RiskConfig(
         account_balance=settings.initial_balance,
+        contract_size=settings.contract_size,
         risk_per_trade_pct=team_risk.get("risk_per_trade_pct", settings.risk_per_trade_pct),
         max_drawdown_pct=team_risk.get("max_drawdown_pct", settings.max_drawdown_pct),
         max_daily_loss_pct=team_risk.get("max_daily_loss_pct"),
@@ -101,7 +102,8 @@ def main() -> None:
         dd_probation_scale=team_risk.get("dd_probation_scale", 0.35),
         dd_resume_pct=team_risk.get("dd_resume_pct", 10.0),
     )
-    cost = CostModel(spread_points=settings.spread_points, slippage_points=settings.slippage_points)
+    cost = CostModel(spread_points=settings.spread_points, slippage_points=settings.slippage_points,
+                     point_value=settings.point_value)
 
     # snapshot ทุก setting ที่มีผลต่อผลลัพธ์ — บันทึกลง DB คู่กับ run เสมอ
     config_snapshot = {
@@ -137,6 +139,7 @@ def main() -> None:
         settings.initial_balance,
         timeframe=settings.timeframe,
         config=json.dumps(config_snapshot, ensure_ascii=False),
+        symbol=settings.symbol,
     )
     print(f"[log] บันทึกทุก signal/decision/trade ลง: {settings.log_db_path} (run_id={run_id})")
 

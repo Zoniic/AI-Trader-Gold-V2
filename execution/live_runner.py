@@ -51,8 +51,10 @@ POLL_INTERVAL_SEC = 30
 
 def build_risk_cfg(cfg: dict, account_balance: float) -> RiskConfig:
     r = cfg.get("risk") or {}
+    settings = load_settings()
     return RiskConfig(
         account_balance=account_balance,
+        contract_size=settings.contract_size,
         risk_per_trade_pct=r.get("risk_per_trade_pct", 1.0),
         max_drawdown_pct=r.get("max_drawdown_pct", 20.0),
         max_daily_loss_pct=r.get("max_daily_loss_pct"),
@@ -542,7 +544,8 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
 
     print(f"[live] เชื่อมต่อ MT5 สำเร็จ — dry_run={dry_run} roster={roster}", flush=True)
     account_balance = broker.account_balance() if not dry_run else settings.initial_balance
-    cost = CostModel(spread_points=settings.spread_points, slippage_points=settings.slippage_points)
+    cost = CostModel(spread_points=settings.spread_points, slippage_points=settings.slippage_points,
+                     point_value=settings.point_value)
     # dry-run กับ live ยิงเข้าคนละ webhook ตั้งใจ — กันข้อความเปิด/ปิดไม้ปนกันในช่องเดียว จนแยกไม่ออก
     # ว่าอันไหนเงินจริง (ดู DISCORD_WEBHOOK_URL_DRY_RUN ใน config.py/.env.example)
     webhook = settings.discord_webhook_url_dry_run if dry_run else settings.discord_webhook_url
