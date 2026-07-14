@@ -115,6 +115,7 @@ class LiveTeam:
     open_trade_id: int | None = None
     pending_close_attempts: int = 0
     magic: int = 0
+    symbol: str = ""
 
 
 def bootstrap_team(
@@ -142,7 +143,7 @@ def bootstrap_team(
     risk_cfg = build_risk_cfg(cfg, account_balance)
     run_id = f"live_{team}_{tf}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     logger = RunLogger(db_path, run_id=run_id)
-    logger.start_run(team, account_balance, timeframe=tf, config=json.dumps(cfg, ensure_ascii=False))
+    logger.start_run(team, account_balance, timeframe=tf, config=json.dumps(cfg, ensure_ascii=False), symbol=symbol)
 
     # โหลด GateState เดิม (cooldown/probation/peak_balance) ที่บันทึกไว้ก่อน process ตาย/restart —
     # ถ้าไม่เคยมี (ทีมใหม่) จะได้ None แล้วสร้างสถานะเปล่าตามปกติ balance ใช้ค่าจาก broker เสมอ
@@ -169,6 +170,7 @@ def bootstrap_team(
         risk=RiskManager(risk_cfg), risk_cfg=risk_cfg, logger=logger,
         management=TradeManagement(**cfg["trade_management"]),
         magic=compute_magic(team, tf),
+        symbol=symbol,
     )
 
     # ไม้ที่เปิดค้างไว้ตอน process ตาย/restart ยังเปิดอยู่จริงใน MT5 แต่ LiveTeam ใหม่ไม่รู้จัก
@@ -412,7 +414,7 @@ def manage_open_position(broker: MT5Broker, lt: LiveTeam, symbol: str, dry_run: 
 
 def process_bar(
     broker: MT5Broker, lt: LiveTeam, symbol: str, cost: CostModel, dry_run: bool,
-    discord_webhook_url: str | None = None,
+    discord_webhook_url: str | None = None, all_teams: list["LiveTeam"] | None = None,
 ) -> None:
     if lt.open_trade_id is not None:
         return  # v1: ทีมละ 1 ไม้พร้อมกัน (ไม่ pyramiding) — เช็ค open_trade_id ไม่ใช่ open_ticket
@@ -447,6 +449,28 @@ def process_bar(
     signal: Signal = lt.strategy.evaluate(data, idx)
     if not signal.is_actionable:
         return
+
+    # กันชน conflict บนบัญชีเดียว: ถ้าทีมอื่นถือไม้ "สวนทาง" บน symbol เดียวกันอยู่ จะไม่เปิดไม้ใหม่
+    # — บนบัญชี hedging สองไม้สวนกันคือจ่าย spread สองต่อเพื่อ net exposure ศูนย์ (เสียฟรี)
+    # และการปิด/แก้ SL ของสองทีมอาจตีกันเอง จึงให้ไม้ที่เปิดก่อนมีสิทธิ์ก่อน (first-come-first-served)
+    if all_teams is not None:
+        opposite_holders = [
+            t for t in all_teams
+            if t is not lt and t.symbol == lt.symbol and t.open_trade_id is not None
+            and t.open_entry_meta.get("direction") is not None
+            and t.open_entry_meta["direction"] != signal.direction
+        ]
+        if opposite_holders:
+            names = ", ".join(f"{t.team}:{t.timeframe}" for t in opposite_holders)
+            print(f"[live] {lt.team}:{lt.timeframe} signal {signal.direction.value} แต่ {names} "
+                  f"ถือไม้สวนทางบน {lt.symbol} อยู่ — ข้ามไม้นี้ (กัน conflict บนบัญชีเดียว)", flush=True)
+            send_discord_alert(
+                f"⚔️ **ข้ามไม้กัน conflict** — `{lt.team}:{lt.timeframe}` อยากเข้า {signal.direction.value} "
+                f"{lt.symbol} แต่ {names} ถือไม้สวนทางอยู่ — ไม้เปิดก่อนได้สิทธิ์ก่อน",
+                discord_webhook_url, level="warning",
+                dedupe_key=f"conflict_{lt.team}_{lt.timeframe}", dedupe_seconds=1800,
+            )
+            return
 
     current_balance = lt.state.balance if dry_run else broker.account_balance()
     lt.state.balance = current_balance
@@ -523,9 +547,15 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
     # ว่าอันไหนเงินจริง (ดู DISCORD_WEBHOOK_URL_DRY_RUN ใน config.py/.env.example)
     webhook = settings.discord_webhook_url_dry_run if dry_run else settings.discord_webhook_url
 
+    # roster entry: (team, tf) หรือ (team, tf, symbol) — ไม่ระบุ symbol = ใช้ settings.symbol
+    # เปิดทางให้รันหลายสินทรัพย์บนบัญชีเดียว (เช่น GOLD + EURUSD) โดยแต่ละทีมผูกกับ symbol ของตัวเอง
     teams = [
-        bootstrap_team(broker, team, tf, settings.symbol, account_balance, settings.log_db_path, dry_run=dry_run)
-        for team, tf in roster
+        bootstrap_team(
+            broker, entry[0], entry[1],
+            entry[2] if len(entry) > 2 and entry[2] else settings.symbol,
+            account_balance, settings.log_db_path, dry_run=dry_run,
+        )
+        for entry in roster
     ]
     print(f"[live] bootstrap เสร็จ {len(teams)} ทีม เริ่ม poll ทุก {poll_interval}s (Ctrl+C หยุด)", flush=True)
 
@@ -534,7 +564,9 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
     # จะไม่มี record ใน DB เลยให้ find_open_trade() เจอตอน bootstrap จึงต้องสแกนเทียบกับ broker ตรงๆ
     if not dry_run:
         claimed_tickets = {lt.open_ticket for lt in teams if lt.open_ticket is not None}
-        broker_positions = broker.get_open_positions(settings.symbol)
+        broker_positions = []
+        for sym in {lt.symbol for lt in teams}:
+            broker_positions.extend(broker.get_open_positions(sym))
         orphans = [p for p in broker_positions if p.ticket not in claimed_tickets]
         if orphans:
             orphan_desc = ", ".join(f"ticket={p.ticket} vol={p.volume}" for p in orphans)
@@ -559,15 +591,16 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
             for lt in teams:
                 try:
                     reconcile_open_position(broker, lt, dry_run, cost, discord_webhook_url=webhook)
-                    if poll_new_bar(broker, lt, settings.symbol):
+                    if poll_new_bar(broker, lt, lt.symbol):
                         # open_trade_id (ไม่ใช่ open_ticket) คือตัวบ่งบอกว่า "มีไม้เปิดอยู่ไหม" ที่ถูกต้อง
                         # ทั้ง dry-run และ live — dry_run ไม่มี ticket จริงจาก MT5 (send_order คืน
                         # ticket=None เสมอ) ถ้าเช็ค open_ticket ตรงนี้ dry-run จะไม่รู้ตัวว่ามีไม้เปิดอยู่
                         # แล้วเข้า process_bar ซ้ำทุกแท่งใหม่ (เปิดไม้ใหม่ทับไม้เดิมที่ยังไม่ปิดใน DB ตลอดไป)
                         if lt.open_trade_id is not None:
-                            manage_open_position(broker, lt, settings.symbol, dry_run)
+                            manage_open_position(broker, lt, lt.symbol, dry_run)
                         else:
-                            process_bar(broker, lt, settings.symbol, cost, dry_run, discord_webhook_url=webhook)
+                            process_bar(broker, lt, lt.symbol, cost, dry_run,
+                                        discord_webhook_url=webhook, all_teams=teams)
                     # อัปเดต heartbeat ทุกรอบ poll (ไม่ใช่แค่ตอนมีแท่งใหม่ปิด) — เพื่อให้ dashboard
                     # รู้ว่า process ยังมีชีวิตอยู่จริง แม้ timeframe ยาว (H1) ที่กว่าแท่งจะปิดใหม่นานเป็นชม.
                     lt.logger.update_heartbeat()
@@ -617,7 +650,9 @@ def parse_args() -> argparse.Namespace:
     mode = p.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", default=True, help="ไม่ยิงออเดอร์จริง (ดีฟอลต์)")
     mode.add_argument("--live", action="store_true", help="ยิงออเดอร์เข้า MT5 demo จริง (ยังต้องเป็น demo)")
-    p.add_argument("--teams", default=None, help="เช่น trend_pullback:M30,london_breakout:M30 (ว่าง=พอร์ตหลัก 8 ทีม)")
+    p.add_argument("--teams", default=None,
+                   help="เช่น trend_pullback:M30,london_breakout:M30:GOLD — รูปแบบ team:TF[:SYMBOL] "
+                        "(ไม่ใส่ SYMBOL = ใช้ SYMBOL จาก .env, ว่างทั้งหมด=พอร์ตหลัก 8 ทีม)")
     p.add_argument("--poll-interval", type=int, default=POLL_INTERVAL_SEC)
     return p.parse_args()
 

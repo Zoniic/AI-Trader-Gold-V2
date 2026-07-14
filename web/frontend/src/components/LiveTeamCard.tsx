@@ -44,6 +44,9 @@ export function LiveTeamCard({ team }: { team: LiveTeamStatus }) {
               <span className="text-sm font-medium text-foreground">
                 {team.strategy}:{team.timeframe}
               </span>
+              <span className="rounded bg-border/60 px-1.5 py-0.5 text-[10px] font-medium text-muted">
+                {team.symbol}
+              </span>
               {team.open_position && (
                 <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-accent">
                   เปิดไม้อยู่

@@ -111,6 +111,7 @@ export type LiveTeamStatus = {
   run_id: string;
   strategy: string;
   timeframe: string | null;
+  symbol: string; // สินทรัพย์ที่ทีมนี้เทรด (multi-asset — run เก่า backend fallback เป็น SYMBOL หลักให้แล้ว)
   started_at: string;
   finished_at: string | null;
   is_running: boolean;
@@ -143,7 +144,8 @@ export type LivePortfolio = {
   floating_pnl: number;
   equity_curve: { time: string; balance: number }[];
   pnl_candles: PnlCandle[];
-  by_team: { strategy: string; timeframe: string | null; pnl: number }[];
+  by_team: { strategy: string; timeframe: string | null; symbol: string; pnl: number }[];
+  by_symbol: { symbol: string; pnl: number; teams: number; open_positions: number }[];
 };
 
 export type LiveStatus = {

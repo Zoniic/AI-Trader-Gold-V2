@@ -86,6 +86,30 @@ export function LiveTabContent() {
         </div>
       </div>
 
+      {/* สรุปต่อสินทรัพย์ — โชว์เฉพาะเมื่อพอร์ตมีมากกว่า 1 symbol (multi-asset) ไม่งั้นเป็น noise */}
+      {status.portfolio.by_symbol && status.portfolio.by_symbol.length > 1 && (
+        <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          {status.portfolio.by_symbol.map((s) => (
+            <div key={s.symbol} className="rounded-xl border border-border bg-surface px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-semibold text-foreground">{s.symbol}</span>
+                <span className="text-[10px] text-muted">{s.teams} ทีม</span>
+              </div>
+              <div
+                className={`mt-1 text-lg font-semibold tabular-nums ${
+                  s.pnl >= 0 ? "text-profit" : "text-loss"
+                }`}
+              >
+                {s.pnl >= 0 ? "+" : ""}${s.pnl.toFixed(2)}
+              </div>
+              <div className="text-[10px] text-muted">
+                {s.open_positions > 0 ? `${s.open_positions} ไม้เปิดอยู่` : "ไม่มีไม้เปิด"}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="mb-1 text-xs text-muted">Equity รวมทั้งพอร์ต (ไม้ที่ปิดแล้วของทุกทีม)</div>

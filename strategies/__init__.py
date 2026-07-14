@@ -14,7 +14,8 @@ from . import trend_pullback  # noqa: F401  ทีม 8 Dip Buyers (pullback con
 from . import volatility_breakout  # noqa: F401  ทีม 9 Range Expanders (Larry Williams)
 from . import sr_bounce  # noqa: F401  ทีม 10 Level Keepers (price action S/R)
 from . import fibonacci_confluence  # noqa: F401  ทีม 11 Fib Confluence Desk (Fibonacci confluence)
-from . import momentum_scalper  # noqa: F401  ทีม 12 สายซิ่ง (M15/M5 scalping)
-from . import rule_breaker  # noqa: F401  ทีม 13 นอกคอก (high win rate, R:R กลับหัว)
+# ทีม 12 momentum_scalper และทีม 13 rule_breaker ถูกถอดจาก registry (2026-07-14) —
+# ทั้งคู่พิสูจน์แล้วว่าไม่มี edge (PF < 1 ทุก config, kill-switch ทุกรอบ ดูประวัติใน configs/*.json)
+# โค้ดยังอยู่ในโฟลเดอร์นี้เป็นบันทึกการวิจัย ถ้าจะชุบชีวิตให้ redesign สัญญาณ + validate ผ่านก่อนค่อย import กลับ
 from . import quick_cash  # noqa: F401  ทีม 14 เก็บเงินด่วน (สายซิ่งมีวินัย burst momentum)
 from . import smc_flow  # noqa: F401  ทีม 15 นายธนาคารเงา (Smart Money Concepts เต็มลำดับ)

@@ -239,6 +239,8 @@ def api_live_status() -> dict:
             "run_id": run["run_id"],
             "strategy": run["strategy"],
             "timeframe": run["timeframe"],
+            # symbol ต่อทีม (multi-asset) — run เก่าก่อนมีคอลัมน์นี้จะเป็น None ให้ fallback SYMBOL หลัก
+            "symbol": run.get("symbol") if pd.notna(run.get("symbol")) else settings.symbol,
             "started_at": run["started_at"],
             "finished_at": run["finished_at"],
             "last_heartbeat": run.get("last_heartbeat"),
@@ -324,9 +326,20 @@ def api_live_status() -> dict:
             {
                 "strategy": t["strategy"],
                 "timeframe": t["timeframe"],
+                "symbol": t["symbol"],
                 "pnl": round(t["total_pnl"] + t["floating_pnl"], 2),
             }
             for t in teams
+        ],
+        # สรุปต่อสินทรัพย์ (multi-asset) — ตอนนี้อาจมีแค่ GOLD แต่โครงสร้างรองรับหลายตัวแล้ว
+        "by_symbol": [
+            {
+                "symbol": sym,
+                "pnl": round(sum(t["total_pnl"] + t["floating_pnl"] for t in teams if t["symbol"] == sym), 2),
+                "teams": sum(1 for t in teams if t["symbol"] == sym),
+                "open_positions": sum(1 for t in teams if t["symbol"] == sym and t["open_position"]),
+            }
+            for sym in sorted({t["symbol"] for t in teams})
         ],
     }
     for t in teams:

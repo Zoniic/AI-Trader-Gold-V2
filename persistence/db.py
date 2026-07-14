@@ -40,7 +40,8 @@ CREATE TABLE IF NOT EXISTS runs (
     halted_at TEXT,
     halt_reason TEXT,
     timeframe TEXT,
-    config TEXT
+    config TEXT,
+    symbol TEXT
 );
 
 CREATE TABLE IF NOT EXISTS signals (
@@ -153,7 +154,7 @@ def _migrate_add_regime_column(conn: sqlite3.Connection) -> None:
             "floating_pnl": "REAL",
         },
         "signals": {"discussion": "TEXT"},
-        "runs": {"timeframe": "TEXT", "config": "TEXT", "last_heartbeat": "TEXT"},
+        "runs": {"timeframe": "TEXT", "config": "TEXT", "last_heartbeat": "TEXT", "symbol": "TEXT"},
     }
     for table, columns in migrations.items():
         existing = [row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()]
@@ -184,11 +185,12 @@ class RunLogger:
         initial_balance: float,
         timeframe: str | None = None,
         config: str | None = None,
+        symbol: str | None = None,
     ) -> None:
         self._conn.execute(
-            "INSERT OR REPLACE INTO runs (run_id, strategy, started_at, initial_balance, timeframe, config) "
-            "VALUES (?, ?, datetime('now'), ?, ?, ?)",
-            (self.run_id, strategy, initial_balance, timeframe, config),
+            "INSERT OR REPLACE INTO runs (run_id, strategy, started_at, initial_balance, timeframe, config, symbol) "
+            "VALUES (?, ?, datetime('now'), ?, ?, ?, ?)",
+            (self.run_id, strategy, initial_balance, timeframe, config, symbol),
         )
         self._conn.commit()
 
