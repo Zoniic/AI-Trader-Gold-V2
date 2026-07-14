@@ -14,13 +14,13 @@
     "trailing_activate_r": 1.0,
     "remove_tp_when_trailing": true
   },
-  "notes": "รอบ2: allowed_regimes=['volatile'] (จากผลรวม 3TF) min_approvals=4 (wrong_entry 34%) | แก้ค่าในไฟล์นี้แล้วรัน backtest ใหม่ได้เลย ทุก run บันทึก config ลง DB ให้ตามรอยได้ | รอบ5: snowball grid เลือก loose_trail exp {'partial_tp_r': None, 'partial_fraction': 0.5, 'move_sl_to_breakeven': True, 'trailing_stop_r': None, 'trailing_activate_r': 1.0, 'remove_tp_when_trailing': False} -> 7.75 (เดิม 2.78)",
+  "notes": "รอบ2: allowed_regimes=['volatile'] (จากผลรวม 3TF) min_approvals=4 (wrong_entry 34%) | แก้ค่าในไฟล์นี้แล้วรัน backtest ใหม่ได้เลย ทุก run บันทึก config ลง DB ให้ตามรอยได้ | รอบ5: snowball grid เลือก loose_trail exp {'partial_tp_r': None, 'partial_fraction': 0.5, 'move_sl_to_breakeven': True, 'trailing_stop_r': None, 'trailing_activate_r': 1.0, 'remove_tp_when_trailing': False} -> 7.75 (เดิม 2.78) | 2026-07-14 แผนคูณ risk ชั้นที่ 1 (ชุดลดกันชน): risk_per_trade_pct 0.5 -> 1.75 (x3.5) ตาม DD budget — เป้า DD ต่อทีมไม่เกิน ~11% พอร์ตรวม ~-18%",
   "allowed_regimes": [
     "volatile"
   ],
   "min_approvals": 4,
   "risk": {
-    "risk_per_trade_pct": 0.5,
+    "risk_per_trade_pct": 1.75,
     "max_daily_loss_pct": 3.0,
     "max_weekly_loss_pct": 6.0,
     "max_drawdown_pct": 20.0,

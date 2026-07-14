@@ -17,7 +17,7 @@
     "trailing_activate_r": 1.5,
     "remove_tp_when_trailing": true
   },
-  "notes": "⚠ walk-forward: pooled ติดลบ (-630, PF 0.93) แม้ 3/5 fold บวก — ยังไม่น่าเชื่อถือ ห้ามใช้เกิน backtest | รอบ3 M30: divergence ต้องชัดขึ้น (gap 3.0, สดภายใน 8 แท่ง) พลิก -17→+5.78 | รอบ5: snowball grid เลือก partial15_trail1 exp {'partial_tp_r': 1.0, 'partial_fraction': 0.5, 'move_sl_to_breakeven': True, 'trailing_stop_r': None, 'trailing_activate_r': 1.0, 'remove_tp_when_trailing': False} -> 6.82 (เดิม 1.70) | รอบ8 hour-filter: block ชม.[9, 15, 16] (แพ้ซ้ำๆ) ผ่าน walk-forward guard (WF ไม่ลด, exp ดีขึ้น) | รอบ8 devil: min_approvals 4->3 (opposite-devil ชนะ + WF ไม่ลด) | ยืนยัน: no_gate ทำให้พังทุกทีม = gate จำเป็นจริง",
+  "notes": "⚠ walk-forward: pooled ติดลบ (-630, PF 0.93) แม้ 3/5 fold บวก — ยังไม่น่าเชื่อถือ ห้ามใช้เกิน backtest | รอบ3 M30: divergence ต้องชัดขึ้น (gap 3.0, สดภายใน 8 แท่ง) พลิก -17→+5.78 | รอบ5: snowball grid เลือก partial15_trail1 exp {'partial_tp_r': 1.0, 'partial_fraction': 0.5, 'move_sl_to_breakeven': True, 'trailing_stop_r': None, 'trailing_activate_r': 1.0, 'remove_tp_when_trailing': False} -> 6.82 (เดิม 1.70) | รอบ8 hour-filter: block ชม.[9, 15, 16] (แพ้ซ้ำๆ) ผ่าน walk-forward guard (WF ไม่ลด, exp ดีขึ้น) | รอบ8 devil: min_approvals 4->3 (opposite-devil ชนะ + WF ไม่ลด) | ยืนยัน: no_gate ทำให้พังทุกทีม = gate จำเป็นจริง | 2026-07-14 แผนคูณ risk ชั้นที่ 1 (ชุดลดกันชน): risk_per_trade_pct 0.5 -> 1.0 (x2.0) ตาม DD budget — เป้า DD ต่อทีมไม่เกิน ~11% พอร์ตรวม ~-18%",
   "allowed_regimes": [
     "range",
     "low_volatility"
@@ -29,7 +29,7 @@
   ],
   "min_approvals": 3,
   "risk": {
-    "risk_per_trade_pct": 0.5,
+    "risk_per_trade_pct": 1.0,
     "max_daily_loss_pct": 3.0,
     "max_weekly_loss_pct": 6.0,
     "max_drawdown_pct": 20.0,
