@@ -8,6 +8,7 @@ import { TeamPnlBarChart } from "@/components/TeamPnlBarChart";
 import { TickingNumber } from "@/components/TickingNumber";
 import { LiveEquitySparkline } from "@/components/LiveEquitySparkline";
 import { PnlCandleChart } from "@/components/PnlCandleChart";
+import { PriceChart } from "@/components/PriceChart";
 
 const LIVE_POLL_MS = 7000;
 
@@ -84,6 +85,11 @@ export function LiveTabContent() {
         <div className="mt-2 border-t border-border pt-2">
           <LiveEquitySparkline points={status.portfolio.equity_curve} />
         </div>
+      </div>
+
+      {/* กราฟราคาสไตล์ TradingView + จุดเข้า/ออกไม้ของทุกทีม — ตอบ "ตอนนี้ราคาอยู่ไหน ทีมเข้าตรงไหน" */}
+      <div className="mb-4">
+        <PriceChart symbols={[...new Set(status.teams.map((t) => t.symbol))]} />
       </div>
 
       {/* สรุปต่อสินทรัพย์ — โชว์เฉพาะเมื่อพอร์ตมีมากกว่า 1 symbol (multi-asset) ไม่งั้นเป็น noise */}

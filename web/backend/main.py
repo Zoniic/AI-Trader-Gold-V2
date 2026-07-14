@@ -348,6 +348,94 @@ def api_live_status() -> dict:
     return {"active": active_found, "teams": teams, "portfolio": portfolio}
 
 
+@app.get("/live/candles")
+def api_live_candles(symbol: str = "GOLD", timeframe: str = "M30", bars: int = 300) -> dict:
+    """แท่งเทียนราคาจริง + จุดเข้า/ออกไม้ของทุกทีม (สำหรับกราฟสไตล์ TradingView บนหน้า Live)
+
+    แหล่งราคา: ลอง MT5 สด (เครื่องที่รัน backend มัก login terminal อยู่แล้ว) — ถ้าไม่ได้
+    fallback เป็นไฟล์ parquet cache (ราคาจะอัปเดตถึงครั้งล่าสุดที่ดึงข้อมูลเท่านั้น)
+    """
+    from pathlib import Path
+
+    settings = load_settings()
+    bars = max(50, min(bars, 1000))
+    df = None
+    source = "parquet"
+    try:
+        import MetaTrader5 as mt5
+        tf_map = {"M5": "TIMEFRAME_M5", "M15": "TIMEFRAME_M15", "M30": "TIMEFRAME_M30",
+                  "H1": "TIMEFRAME_H1", "H4": "TIMEFRAME_H4"}
+        if timeframe in tf_map and mt5.initialize():
+            mt5.symbol_select(symbol, True)
+            rates = mt5.copy_rates_from_pos(symbol, getattr(mt5, tf_map[timeframe]), 0, bars)
+            if rates is not None and len(rates) > 10:
+                df = pd.DataFrame(rates)
+                df["time"] = pd.to_datetime(df["time"], unit="s")
+                df = df.set_index("time")
+                source = "mt5"
+    except Exception:
+        df = None
+    if df is None:
+        pq = Path(settings.data_dir) / f"{symbol}_{timeframe}.parquet"
+        if not pq.exists():
+            raise HTTPException(status_code=404, detail=f"ไม่มีข้อมูล {symbol} {timeframe} (MT5 ไม่ตอบและไม่มี parquet)")
+        df = pd.read_parquet(pq).tail(bars)
+
+    candles = [
+        {"time": int(ts.timestamp()), "open": float(r["open"]), "high": float(r["high"]),
+         "low": float(r["low"]), "close": float(r["close"])}
+        for ts, r in df.iterrows()
+    ]
+    t_start = df.index[0]
+
+    # markers จุดเข้า/ออกของทุกทีม live บน symbol นี้ ภายในช่วงเวลาของกราฟ
+    runs_df = list_runs(settings.log_db_path)
+    live_runs = runs_df[runs_df["run_id"].str.startswith("live_", na=False)]
+    live_runs = live_runs.drop_duplicates(subset=["strategy", "timeframe"], keep="first")
+    markers, open_lines = [], []
+    for _, run in live_runs.iterrows():
+        run_symbol = run.get("symbol") if pd.notna(run.get("symbol")) else settings.symbol
+        if run_symbol != symbol:
+            continue
+        team_label = f"{run['strategy']}:{run['timeframe']}"
+        trades_df = get_trades(settings.log_db_path, run["run_id"])
+        if trades_df.empty:
+            continue
+        for _, tr in trades_df.iterrows():
+            entry_t = pd.to_datetime(tr["entry_time"])
+            if entry_t >= t_start and pd.notna(tr.get("entry")):
+                is_buy = tr["direction"] == "BUY"
+                markers.append({
+                    "time": int(entry_t.timestamp()),
+                    "position": "belowBar" if is_buy else "aboveBar",
+                    "shape": "arrowUp" if is_buy else "arrowDown",
+                    "color": "#22C55E" if is_buy else "#EF4444",
+                    "text": f"{'B' if is_buy else 'S'} {team_label}",
+                })
+            if pd.notna(tr.get("exit_time")):
+                exit_t = pd.to_datetime(tr["exit_time"])
+                if exit_t >= t_start and pd.notna(tr.get("pnl")):
+                    win = float(tr["pnl"]) >= 0
+                    markers.append({
+                        "time": int(exit_t.timestamp()),
+                        "position": "aboveBar" if tr["direction"] == "BUY" else "belowBar",
+                        "shape": "circle",
+                        "color": "#22C55E" if win else "#EF4444",
+                        "text": f"x {float(tr['pnl']):+.0f}",
+                    })
+            else:
+                # ไม้เปิดอยู่ — ส่งเส้น entry/SL/TP ให้กราฟวาดระดับราคา
+                open_lines.append({
+                    "team": team_label, "direction": tr["direction"],
+                    "entry": float(tr["entry"]) if pd.notna(tr.get("entry")) else None,
+                    "sl": float(tr["sl"]) if pd.notna(tr.get("sl")) else None,
+                    "tp": float(tr["tp"]) if pd.notna(tr.get("tp")) else None,
+                })
+    markers.sort(key=lambda m: m["time"])
+    return {"symbol": symbol, "timeframe": timeframe, "source": source,
+            "candles": candles, "markers": markers, "open_lines": open_lines}
+
+
 @app.get("/runs/{run_id}")
 def api_run_detail(run_id: str) -> dict:
     settings = load_settings()

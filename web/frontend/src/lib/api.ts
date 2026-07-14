@@ -154,6 +154,39 @@ export type LiveStatus = {
   portfolio: LivePortfolio;
 };
 
+export type LiveCandle = { time: number; open: number; high: number; low: number; close: number };
+export type LiveMarker = {
+  time: number;
+  position: "aboveBar" | "belowBar";
+  shape: "arrowUp" | "arrowDown" | "circle";
+  color: string;
+  text: string;
+};
+export type LiveOpenLine = {
+  team: string;
+  direction: string;
+  entry: number | null;
+  sl: number | null;
+  tp: number | null;
+};
+export type LiveCandles = {
+  symbol: string;
+  timeframe: string;
+  source: string; // "mt5" = ราคาสด | "parquet" = cache ล่าสุด (อาจไม่ใช่ราคาปัจจุบัน)
+  candles: LiveCandle[];
+  markers: LiveMarker[];
+  open_lines: LiveOpenLine[];
+};
+
+export async function fetchLiveCandles(symbol: string, timeframe: string): Promise<LiveCandles> {
+  const res = await fetch(
+    `${BACKEND_URL}/live/candles?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`,
+    { cache: "no-store" },
+  );
+  if (!res.ok) throw new Error(`fetchLiveCandles failed: ${res.status}`);
+  return res.json();
+}
+
 export async function fetchLiveStatus(): Promise<LiveStatus> {
   const res = await fetch(`${BACKEND_URL}/live/status`, { cache: "no-store" });
   if (!res.ok) throw new Error(`fetchLiveStatus failed: ${res.status}`);
