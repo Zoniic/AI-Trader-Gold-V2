@@ -417,6 +417,7 @@ def manage_open_position(broker: MT5Broker, lt: LiveTeam, symbol: str, dry_run: 
 def process_bar(
     broker: MT5Broker, lt: LiveTeam, symbol: str, cost: CostModel, dry_run: bool,
     discord_webhook_url: str | None = None, all_teams: list["LiveTeam"] | None = None,
+    allow_opposite_orders: bool = True,
 ) -> None:
     if lt.open_trade_id is not None:
         return  # v1: ทีมละ 1 ไม้พร้อมกัน (ไม่ pyramiding) — เช็ค open_trade_id ไม่ใช่ open_ticket
@@ -452,10 +453,12 @@ def process_bar(
     if not signal.is_actionable:
         return
 
-    # กันชน conflict บนบัญชีเดียว: ถ้าทีมอื่นถือไม้ "สวนทาง" บน symbol เดียวกันอยู่ จะไม่เปิดไม้ใหม่
-    # — บนบัญชี hedging สองไม้สวนกันคือจ่าย spread สองต่อเพื่อ net exposure ศูนย์ (เสียฟรี)
-    # และการปิด/แก้ SL ของสองทีมอาจตีกันเอง จึงให้ไม้ที่เปิดก่อนมีสิทธิ์ก่อน (first-come-first-served)
-    if all_teams is not None:
+    # กันชน conflict บนบัญชีเดียว (เลือกได้ผ่าน ALLOW_OPPOSITE_ORDERS):
+    # - allow_opposite_orders=True (ดีฟอลต์): ทีมอิสระเต็มรูป เปิดสวนกันได้แบบ hedging — live ตรงกับ
+    #   backtest เป๊ะ (ทุกทีมเข้าตามสัญญาณตัวเองเสมอ) แลกกับจ่าย spread สองต่อช่วงทีมเห็นต่างกัน
+    #   หมายเหตุ: การปิด/เลื่อน SL ไม่ตีกันอยู่แล้วเพราะทุกคำสั่งผูก magic ต่อทีม (ดู broker.py)
+    # - False: ประหยัด spread — ไม้เปิดก่อนได้สิทธิ์ก่อน ไม้สวนถูกข้าม (live จะเบี่ยงจาก backtest)
+    if not allow_opposite_orders and all_teams is not None:
         opposite_holders = [
             t for t in all_teams
             if t is not lt and t.symbol == lt.symbol and t.open_trade_id is not None
@@ -603,7 +606,8 @@ def run(roster: list[tuple[str, str]], dry_run: bool, poll_interval: int) -> Non
                             manage_open_position(broker, lt, lt.symbol, dry_run)
                         else:
                             process_bar(broker, lt, lt.symbol, cost, dry_run,
-                                        discord_webhook_url=webhook, all_teams=teams)
+                                        discord_webhook_url=webhook, all_teams=teams,
+                                        allow_opposite_orders=settings.allow_opposite_orders)
                     # อัปเดต heartbeat ทุกรอบ poll (ไม่ใช่แค่ตอนมีแท่งใหม่ปิด) — เพื่อให้ dashboard
                     # รู้ว่า process ยังมีชีวิตอยู่จริง แม้ timeframe ยาว (H1) ที่กว่าแท่งจะปิดใหม่นานเป็นชม.
                     lt.logger.update_heartbeat()

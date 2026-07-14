@@ -41,6 +41,7 @@ class Settings:
     slippage_points: float
     point_value: float  # ขนาด 1 point เป็นหน่วยราคา (GOLD=0.01, EURUSD=0.00001)
     contract_size: float  # ขนาดสัญญาต่อ 1 lot (GOLD=100 oz, EURUSD=100000)
+    allow_opposite_orders: bool  # True = ทีมเปิดไม้สวนทีมอื่นบน symbol เดียวกันได้ (hedging เต็มรูป)
     discord_webhook_url: str | None
     discord_webhook_url_dry_run: str | None
     mt5: MT5Credentials
@@ -70,6 +71,9 @@ def load_settings() -> Settings:
         # ต้องตั้ง env ให้ตรงโบรก เช่น EURUSD: POINT_VALUE=0.00001 CONTRACT_SIZE=100000 SPREAD_POINTS=12
         point_value=_env_float("POINT_VALUE", 0.01),
         contract_size=_env_float("CONTRACT_SIZE", 100.0),
+        # ทีมอิสระเต็มรูป (เหมือน backtest เป๊ะ ทุกทีมเข้าตามสัญญาณตัวเองเสมอ) vs ประหยัด spread
+        # (ไม้เปิดก่อนได้สิทธิ์ก่อน ไม้สวนถูกข้าม) — ค่าเริ่มต้น true เพื่อให้ live เทียบ backtest ได้ตรงๆ
+        allow_opposite_orders=(os.getenv("ALLOW_OPPOSITE_ORDERS", "true").strip().lower() != "false"),
         discord_webhook_url=os.getenv("DISCORD_WEBHOOK_URL") or None,
         # webhook แยกกันตั้งใจ — dry-run/backtest กับ live ยิงเข้าคนละช่อง Discord กัน ไม่งั้นตอนทดสอบ
         # dry-run ถี่ๆ จะไปปนกับข้อความไม้จริงในช่องเดียวกัน ทำให้แยกไม่ออกว่าอันไหนเงินจริง
