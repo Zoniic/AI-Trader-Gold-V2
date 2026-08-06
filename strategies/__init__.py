@@ -19,3 +19,4 @@ from . import fibonacci_confluence  # noqa: F401  ทีม 11 Fib Confluence De
 # โค้ดยังอยู่ในโฟลเดอร์นี้เป็นบันทึกการวิจัย ถ้าจะชุบชีวิตให้ redesign สัญญาณ + validate ผ่านก่อนค่อย import กลับ
 from . import quick_cash  # noqa: F401  ทีม 14 เก็บเงินด่วน (สายซิ่งมีวินัย burst momentum)
 from . import smc_flow  # noqa: F401  ทีม 15 นายธนาคารเงา (Smart Money Concepts เต็มลำดับ)
+from . import midas  # noqa: F401  ทีม 16 MIDAS (EMA ribbon + BB squeeze, reverse-engineered)
