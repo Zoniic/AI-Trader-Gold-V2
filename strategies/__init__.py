@@ -19,4 +19,7 @@ from . import fibonacci_confluence  # noqa: F401  ทีม 11 Fib Confluence De
 # โค้ดยังอยู่ในโฟลเดอร์นี้เป็นบันทึกการวิจัย ถ้าจะชุบชีวิตให้ redesign สัญญาณ + validate ผ่านก่อนค่อย import กลับ
 from . import quick_cash  # noqa: F401  ทีม 14 เก็บเงินด่วน (สายซิ่งมีวินัย burst momentum)
 from . import smc_flow  # noqa: F401  ทีม 15 นายธนาคารเงา (Smart Money Concepts เต็มลำดับ)
-from . import midas  # noqa: F401  ทีม 16 MIDAS (EMA ribbon + BB squeeze, reverse-engineered)
+# ทีม 16 MIDAS ถูกแยกออกไปเป็นโปรเจกต์ต่างหาก (2026-08-07) -> DEV/PROJECT_MIDAS
+# เหตุผล: สถาปัตยกรรมที่ MIDAS ต้องการ (pyramiding เติมไม้ซ้อน, sizing จาก equity, margin-level
+# guard, trailing ล้วนไม่มี TP) เข้ากันไม่ได้กับ engine ของโปรเจกต์นี้ที่เป็น "ทีมละ 1 ไม้พร้อมกัน"
+# ผลวิเคราะห์ log จริงที่นำไปสู่การตัดสินใจ: PROJECT_MIDAS/docs/log-findings.md
