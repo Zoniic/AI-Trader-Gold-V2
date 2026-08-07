@@ -23,19 +23,33 @@ Reverse-engineer จาก "Gold Bot 2026" (log จริง 1 ก.ค.-6 ส.�
 - Kelly fraction / equity-based sizing / profit-skimming (P9-P11): ระบบ risk ที่มีอยู่ใช้
   risk_per_trade_pct ของ balance ต่อไม้ (ไม่ใช่ full Kelly formula) — ตั้งค่า risk_per_trade_pct
   ต่ำแบบระมัดระวังใน config แทนการ implement Kelly optimizer เต็มรูป (นอกขอบเขตงานนี้)
+
+⚠️⚠️ (2026-07-14) คำสั่งชัดเจนจากผู้ใช้: "ทีม MIDAS จะใช้กฎของตัวเองเท่านั้น กฎเดิมที่มีอยู่ก่อน MIDAS
+เข้ามาให้ยกเลิกไปทั้งหมด" ยืนยันซ้ำผ่าน AskUserQuestion ว่าต้องการยกเลิก "ทั้งหมดจริงๆ รวม kill-switch"
+จึงมีการเปลี่ยนแปลง 2 ชั้นเทียบกับทีมอื่นทุกทีมในโปรเจกต์:
+
+1) คณะกรรมการ — เอาสมาชิกที่ใช้ร่วมกับทีมอื่น (make_risk_officer/make_session_analyst/
+   make_volatility_analyst แบบทั่วไป) ออกทั้งหมด แทนที่ด้วยกรรมการที่มาจากสเปกของ MIDAS เองล้วนๆ
+   (squeeze F3, ribbon hysteresis F1, structure-target guard, volatility-spike guard) — ยังคง 5
+   คนตาม contract test ของโปรเจกต์ (ทุกทีมต้องมี 5 คน) แต่เนื้อหากฎเป็นของ MIDAS เองทั้งหมด
+
+2) risk gate ระดับ engine (kill-switch/max-DD/daily-loss/weekly-loss/regime-filter/blocked-hours
+   ใน risk/live_gate.py ที่ทุกทีมใช้ร่วมกัน) — ปิดทั้งหมดผ่าน config: risk.disable_dd_halt=true,
+   max_daily_loss_pct=null, max_weekly_loss_pct=null, allowed_regimes=null, blocked_hours=null,
+   trade_management.cooldown_bars_after_loss=0 (ดู configs/midas_M30.json)
+
+⚠️ ผลที่ตามมาที่ต้องรู้ไว้ตรงๆ: ไม่มีเพดานความเสี่ยงระดับ account เหลืออยู่เลยสำหรับทีมนี้ —
+position sizing (risk/position_sizing.py::size_position) มี min_lot floor 0.01 เสมอแม้ balance
+จะเหลือน้อย/ติดลบทางทฤษฎี บน backtest ถ้าเจอ losing streak ยาว equity จะไหลลงได้ไม่มีเบรกจนกว่าจะ
+หมดข้อมูล (ไม่เหมือนทุกทีมอื่นที่มี kill-switch/DD cap คุมไว้เสมอ) — เป็นความเสี่ยงที่ผู้ใช้ยอมรับแล้ว
+โดยตรง แต่ยังปลอดภัยเพราะ live trading ยังบังคับ dry_run/demo-only เหมือนทุกทีม (execution/broker.py
+ปฏิเสธบัญชีจริงเสมอ ไม่เกี่ยวกับ risk gate ที่ปิดไป) ⚠️ ห้ามเปิด --live โดยไม่ทบทวนพฤติกรรมนี้ก่อน
 """
 from __future__ import annotations
 
 import pandas as pd
 
-from core.committee import (
-    Committee,
-    CommitteeMember,
-    make_proposer,
-    make_risk_officer,
-    make_session_analyst,
-    make_volatility_analyst,
-)
+from core.committee import Committee, CommitteeMember, make_proposer
 from core.signal import Direction, MarketData, Signal
 from core.strategy import Strategy, register_strategy
 
@@ -69,6 +83,41 @@ def _make_ribbon_hysteresis_analyst(name: str) -> CommitteeMember:
     return CommitteeMember(name, "Ribbon Hysteresis Analyst", check)
 
 
+def _make_structure_target_guard(name: str, min_rr: float = 0.8) -> CommitteeMember:
+    """แทนที่ make_risk_officer แบบทั่วไป (ของทีมอื่น) ด้วยเวอร์ชันของ MIDAS เอง — เช็ค R:R จาก
+    swing SL/TP ตามสเปกของ MIDAS เอง (§5.2 TP ก็เป็นระดับโครงสร้างถัดไป ไม่ใช่ R-multiple คงที่)
+    min_rr ต่ำกว่าทีมอื่นตั้งใจ เพราะสเปกยืนยันว่าบอทต้นฉบับมี RR ต่ำสุดถึง 0.08 แล้วยังกำไรได้
+    (เพราะ TP ไม่เคยเป็นตัวตัดสินจริง) — เก็บพอกันเคส SL/TP ผิดปกติสุดขั้วเท่านั้น
+    """
+
+    def check(ctx: dict) -> tuple[bool, str]:
+        rr = ctx.get("structure_rr", 0.0)
+        if rr < min_rr:
+            return False, f"R:R จาก swing structure {rr:.2f} ต่ำกว่าเกณฑ์ {min_rr} ค้าน"
+        return True, f"R:R จาก swing structure {rr:.2f} — ผ่าน"
+
+    return CommitteeMember(name, "Structure Target Guard", check)
+
+
+def _make_volatility_spike_guard(name: str, max_ratio: float = 3.0) -> CommitteeMember:
+    """ตัวแทน spread guard ของสเปก MIDAS เอง (§5: "ข้ามถ้า spread > 0.5×ATR(M5)") — backtest ของ
+    โปรเจกต์นี้ไม่มีข้อมูล spread สดระดับ tick ให้เช็คตรงๆ จึงใช้ ATR ปัจจุบันเทียบ median เป็น proxy
+    ของช่วงข่าวแรง/ผันผวนผิดปกติที่สเปกต้นฉบับกังวล (สเปรดจริงมักกว้างพร้อมกับ ATR พุ่ง) — ระบุไว้ตรงๆ
+    ว่าเป็นการประมาณ ไม่ใช่การวัด spread จริง
+    """
+
+    def check(ctx: dict) -> tuple[bool, str]:
+        atr, atr_median = ctx.get("atr", 0.0), ctx.get("atr_median", 0.0)
+        if atr_median > 0 and atr / atr_median > max_ratio:
+            return False, (
+                f"ATR {atr:.2f} สูงกว่า median {atr_median:.2f} เกิน {max_ratio}x — ประมาณว่า "
+                "spread กว้างผิดปกติ (proxy ของ spread guard ในสเปก) ค้าน"
+            )
+        return True, "volatility ปกติ — ผ่าน"
+
+    return CommitteeMember(name, "Volatility Spike Guard", check)
+
+
 @register_strategy
 class MidasStrategy(Strategy):
     name = "midas"
@@ -77,7 +126,9 @@ class MidasStrategy(Strategy):
         "F1 EMA ribbon 20/50/100/200 ให้ทิศ, F2 เดินตาม Bollinger Bands(20,2) เมื่อ ribbon พันกัน, "
         "F3 บล็อกเทรดเมื่อ BB width squeeze (percentile<25) — แก้จุดที่บอทเดิมเสียเงินหนักสุด "
         "SL จาก swing สวนทาง (ไม่ใช่ ATR) TP ที่ swing เป้าหมาย ให้ partial TP 50% + trailing "
-        "runner อีกครึ่ง (Option B ตามสเปก แทนที่ TP หลอกของบอทเดิมที่ไม่เคยถูกใช้จริง)"
+        "runner อีกครึ่ง (Option B ตามสเปก แทนที่ TP หลอกของบอทเดิมที่ไม่เคยถูกใช้จริง) "
+        "⚠️ ใช้กฎของตัวเองเท่านั้น — ไม่มี kill-switch/daily-weekly loss/regime filter ที่ใช้ร่วม "
+        "กับทีมอื่น (ปิดผ่าน config ตามคำสั่งผู้ใช้) คณะกรรมการทั้ง 5 คนเป็นกฎของ MIDAS เองล้วนๆ"
     )
 
     def __init__(
@@ -111,13 +162,15 @@ class MidasStrategy(Strategy):
         self.sl_buffer_atr = sl_buffer_atr
         self.atr_period = atr_period
         self.min_target_rr = min_target_rr
+        # กรรมการทั้ง 5 มาจากสเปกของ MIDAS เองล้วนๆ (ไม่มีสมาชิกที่ใช้ร่วมกับทีมอื่น) ตามที่ผู้ใช้
+        # สั่งชัดเจนว่า "ใช้กฎของตัวเองเท่านั้น" — ดู warning ยาวด้านบนไฟล์
         self._committee = Committee(
             [
                 make_proposer("ราชามิดาส"),
                 _make_squeeze_analyst("นักตรวจ BB Width"),
                 _make_ribbon_hysteresis_analyst("นักจับจังหวะ Ribbon"),
-                make_risk_officer("ผู้พิทักษ์ทุน", min_rr=1.0),
-                make_session_analyst("นาฬิกาทราย"),
+                _make_structure_target_guard("ผู้พิทักษ์โครงสร้าง", min_rr=0.8),
+                _make_volatility_spike_guard("นักจับสัญญาณข่าว"),
             ]
         )
 

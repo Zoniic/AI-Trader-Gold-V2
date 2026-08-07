@@ -156,7 +156,10 @@ def main() -> None:
         blocked_hours=team_cfg.get("blocked_hours"),
         pre_trade_gate=args.pre_trade_gate,
         pre_trade_min_quality=args.pre_trade_min_quality,
-        disable_dd_halt=args.disable_dd_halt,
+        # disable_dd_halt เปิดได้ 2 ทาง: --disable-dd-halt (ทดสอบทั้ง run) หรือ risk.disable_dd_halt=true
+        # ใน config ต่อทีม (ทีมที่ตั้งใจไม่ใช้ kill-switch กลาง เช่น midas ที่ใช้กฎความเสี่ยงของตัวเอง
+        # เท่านั้น — ดู strategies/midas.py/configs/midas_M30.json คำเตือนเต็มอยู่ในนั้น)
+        disable_dd_halt=args.disable_dd_halt or bool(team_risk.get("disable_dd_halt", False)),
         entry_confirm_bars=args.confirm_bars,
         entry_confirm_threshold_r=args.confirm_threshold_r,
         discord_webhook_url=settings.discord_webhook_url_dry_run if args.discord_alert else None,

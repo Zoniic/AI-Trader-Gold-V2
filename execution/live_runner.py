@@ -433,9 +433,14 @@ def process_bar(
     allowed = set(lt.cfg.get("allowed_regimes")) if lt.cfg.get("allowed_regimes") else None
     blocked_hr = set(lt.cfg.get("blocked_hours")) if lt.cfg.get("blocked_hours") else None
 
+    # risk.disable_dd_halt=true ใน config ต่อทีม = ทีมนั้นไม่ผ่าน kill-switch กลาง (ใช้กฎความเสี่ยงของ
+    # ตัวเองเท่านั้น — เช่น midas ตามที่ผู้ใช้ยืนยันชัดเจนว่าต้องการยกเลิกกฎเดิมทั้งหมดรวม kill-switch)
+    # daily/weekly loss cap + regime/hour filter ปิดได้อยู่แล้วผ่าน config เดิม (None = ไม่จำกัด)
+    disable_dd_halt = bool((lt.cfg.get("risk") or {}).get("disable_dd_halt", False))
     gate = check_gate(
         lt.state, lt.risk, lt.risk_cfg, idx, bar_time,
         regime=regime_series.iloc[idx], allowed_regimes=allowed, blocked_hours=blocked_hr,
+        disable_dd_halt=disable_dd_halt,
     )
     if gate.halted:
         print(f"[live] {lt.team}:{lt.timeframe} kill-switch: {gate.reason} — หยุดเทรดทีมนี้ถาวร", flush=True)
