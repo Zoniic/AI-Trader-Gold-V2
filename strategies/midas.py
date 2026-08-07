@@ -99,23 +99,42 @@ def _make_structure_target_guard(name: str, min_rr: float = 0.8) -> CommitteeMem
     return CommitteeMember(name, "Structure Target Guard", check)
 
 
-def _make_volatility_spike_guard(name: str, max_ratio: float = 3.0) -> CommitteeMember:
-    """ตัวแทน spread guard ของสเปก MIDAS เอง (§5: "ข้ามถ้า spread > 0.5×ATR(M5)") — backtest ของ
-    โปรเจกต์นี้ไม่มีข้อมูล spread สดระดับ tick ให้เช็คตรงๆ จึงใช้ ATR ปัจจุบันเทียบ median เป็น proxy
-    ของช่วงข่าวแรง/ผันผวนผิดปกติที่สเปกต้นฉบับกังวล (สเปรดจริงมักกว้างพร้อมกับ ATR พุ่ง) — ระบุไว้ตรงๆ
-    ว่าเป็นการประมาณ ไม่ใช่การวัด spread จริง
+def _make_regime_gate(
+    name: str, block_trend_above_adx: float = 25.0, max_atr_ratio: float = 3.0
+) -> CommitteeMember:
+    """F2 Regime Gate ตามสถาปัตยกรรมของ MIDAS เอง (gold-bot-v2-architecture-workflow.md §1:
+    "F2: Regime Gate — ADX / ATR expansion → allow / block") — เป็นชิ้นส่วนที่สเปกออกแบบไว้ตั้งแต่ต้น
+    แต่รอบแรกยังไม่ได้ implement จึงเป็นสาเหตุใหญ่ที่ผลออกมาแย่
+
+    ทำสองอย่างในตัวเดียวตามที่สเปกระบุ:
+    1) ADX gate — บล็อกเมื่อ ADX >= threshold (เทรนด์แรง) เพราะข้อมูลจริงชี้ว่าท่านี้พังในเทรนด์:
+       M5 regime=trend ได้ PF 0.27 (-1,855 จาก 33 ไม้) ขณะที่ volatile PF 2.96 / low_vol 1.19 /
+       range 1.01 — ribbon+BB เป็นท่าจับ "การกลับตัว/ทะลุกรอบระยะสั้น" ไม่ใช่ท่าตามเทรนด์ยาว
+       (สอดคล้องกับ §3.2 ของสเปก: Engine B เข้าเมื่อ signal เป็นกลาง ไม่ใช่ตอนเทรนด์ชัด)
+    2) ATR expansion gate — บล็อกเมื่อ ATR พุ่งเกิน max_atr_ratio เท่าของ median ใช้แทน spread guard
+       ของสเปก (§5 "ข้ามถ้า spread > 0.5×ATR(M5)") เพราะ backtest ไม่มีข้อมูล spread ระดับ tick จริง
+       — ระบุตรงๆ ว่าเป็น proxy ไม่ใช่การวัด spread จริง
+
+    หมายเหตุสำคัญ: คำนวณ ADX/ATR เองจาก ctx ที่ MIDAS ส่งให้ ไม่ได้ใช้ allowed_regimes ของ engine
+    กลาง (risk/live_gate.py) ที่ทีมอื่นใช้ร่วมกัน — ทีมนี้จึงยังคง "ใช้กฎของตัวเองเท่านั้น" ตามคำสั่ง
     """
 
     def check(ctx: dict) -> tuple[bool, str]:
-        atr, atr_median = ctx.get("atr", 0.0), ctx.get("atr_median", 0.0)
-        if atr_median > 0 and atr / atr_median > max_ratio:
+        adx = ctx.get("adx", 0.0)
+        if adx >= block_trend_above_adx:
             return False, (
-                f"ATR {atr:.2f} สูงกว่า median {atr_median:.2f} เกิน {max_ratio}x — ประมาณว่า "
+                f"ADX {adx:.1f} >= {block_trend_above_adx} — เทรนด์แรงเกิน ท่า ribbon+BB ของ MIDAS "
+                "ไม่ถนัด (ข้อมูลจริง M5: regime trend ได้ PF 0.27) ค้าน"
+            )
+        atr, atr_median = ctx.get("atr", 0.0), ctx.get("atr_median", 0.0)
+        if atr_median > 0 and atr / atr_median > max_atr_ratio:
+            return False, (
+                f"ATR {atr:.2f} สูงกว่า median {atr_median:.2f} เกิน {max_atr_ratio}x — ประมาณว่า "
                 "spread กว้างผิดปกติ (proxy ของ spread guard ในสเปก) ค้าน"
             )
-        return True, "volatility ปกติ — ผ่าน"
+        return True, f"ADX {adx:.1f} + ATR expansion ปกติ — regime ผ่าน"
 
-    return CommitteeMember(name, "Volatility Spike Guard", check)
+    return CommitteeMember(name, "Regime Gate (F2)", check)
 
 
 @register_strategy
@@ -147,6 +166,7 @@ class MidasStrategy(Strategy):
         sl_buffer_atr: float = 0.2,
         atr_period: int = 14,
         min_target_rr: float = 2.0,
+        block_trend_above_adx: float = 25.0,
     ):
         self.ema_fast = ema_fast
         self.ema_mid1 = ema_mid1
@@ -162,6 +182,7 @@ class MidasStrategy(Strategy):
         self.sl_buffer_atr = sl_buffer_atr
         self.atr_period = atr_period
         self.min_target_rr = min_target_rr
+        self.block_trend_above_adx = block_trend_above_adx
         # กรรมการทั้ง 5 มาจากสเปกของ MIDAS เองล้วนๆ (ไม่มีสมาชิกที่ใช้ร่วมกับทีมอื่น) ตามที่ผู้ใช้
         # สั่งชัดเจนว่า "ใช้กฎของตัวเองเท่านั้น" — ดู warning ยาวด้านบนไฟล์
         self._committee = Committee(
@@ -170,7 +191,7 @@ class MidasStrategy(Strategy):
                 _make_squeeze_analyst("นักตรวจ BB Width"),
                 _make_ribbon_hysteresis_analyst("นักจับจังหวะ Ribbon"),
                 _make_structure_target_guard("ผู้พิทักษ์โครงสร้าง", min_rr=0.8),
-                _make_volatility_spike_guard("นักจับสัญญาณข่าว"),
+                _make_regime_gate("ผู้เฝ้าประตูสภาพตลาด", block_trend_above_adx=block_trend_above_adx),
             ]
         )
 

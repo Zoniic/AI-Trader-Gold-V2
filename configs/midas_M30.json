@@ -13,7 +13,8 @@
     "swing_right": 3,
     "sl_buffer_atr": 0.2,
     "atr_period": 14,
-    "min_target_rr": 1.0
+    "min_target_rr": 1.0,
+    "block_trend_above_adx": 25.0
   },
   "trade_management": {
     "partial_tp_r": null,
@@ -24,7 +25,7 @@
     "remove_tp_when_trailing": true,
     "cooldown_bars_after_loss": 0
   },
-  "notes": "2026-07-14 คำสั่งผู้ใช้: 'ทีม MIDAS จะใช้กฎของตัวเองเท่านั้น กฎเดิมที่มีอยู่ก่อน MIDAS เข้ามาให้ ยกเลิกไปทั้งหมด' ยืนยันซ้ำผ่าน AskUserQuestion ว่ายกเลิกทั้งหมดจริงๆ รวม kill-switch — เปลี่ยน 2 ชั้น: (1) คณะกรรมการเปลี่ยนจาก generic risk_officer/session_analyst/volatility_analyst (ที่ทีมอื่นใช้ร่วมกัน) เป็นกฎของ MIDAS เองล้วนๆ 5 คน: proposer, squeeze(F3), ribbon-hysteresis(F1), structure-target-RR-guard, volatility-spike-guard (proxy ของ spread guard ในสเปก — ไม่มีข้อมูล spread tick จริงให้เช็คตรงๆ) (2) risk.disable_dd_halt=true + max_daily/weekly_loss_pct=null + allowed_regimes/blocked_hours=null + cooldown_bars_after_loss=0 = ปิด kill-switch/daily-weekly cap/regime-hour filter ของ engine กลางทั้งหมดเฉพาะทีมนี้ (ทีมอื่นทั้งหมดยังมีครบตามเดิม) | ผลจริงหลังปิดกฎทั้งหมด (GOLD M30, 2023-2026): PF 0.690, WR 44.6%, 83 ไม้/3ปี, ไม่มี kill-switch หยุดเลยตลอดทั้ง backtest (รันจนหมดข้อมูลจริง) max DD ที่เกิดขึ้นเอง -15.83% (เทียบ config รอบก่อน ที่ยังมี regime filter+snowball ได้ PF 0.846 — การถอด regime filter ตามคำสั่งทำให้แย่ลง เพราะทีม range regime เดียวที่กำไรจริง PF 1.17 ถูกเจือจางด้วย trend/volatile ที่ขาดทุนหนัก) | ⚠️ ยังไม่กำไร (PF<1) และตอนนี้ไม่มีเพดานความเสี่ยงระดับ account ใดๆ เหลืออยู่เลยสำหรับทีมนี้ — ถ้าเทรนด์ขาดทุนยาวกว่านี้ในข้อมูลชุดอื่น equity จะไหลลงได้ไม่มีเบรกจนกว่าจะหมดข้อมูลหรือ balance ใกล้ศูนย์ (position sizing มี min_lot floor 0.01 เสมอ) ⚠️⚠️ ห้ามเอาไป live เด็ดขาดจนกว่าจะพิสูจน์ PF>1 ก่อน — และก่อนเปิด --live ต้องทบทวนอีกครั้งว่ายังต้องการปิด kill-switch จริงหรือไม่ (dry-run/demo-only ยังคุ้มครองเรื่องเงินจริงอยู่ แต่ไม่คุ้มครองเรื่อง equity ไหลไม่มีเบรกใน paper trading)",
+  "notes": "GOLD M30 (3.5 ปี 2023-2026) — ทีมใช้กฎของตัวเองเท่านั้นตามคำสั่งผู้ใช้ (ไม่มี kill-switch/daily-weekly cap/regime filter ของ engine กลาง) | หลัง implement F2 Regime Gate ของ MIDAS เอง (block ADX>=25 + ATR expansion guard): PF 0.754 WR 45.5% 55 ไม้ DD -12.0% — แย่ลงจากก่อนมี F2 (PF 0.690 -> 0.754 ดีขึ้นเล็กน้อยจริง แต่ยังต่ำกว่า 1 ชัดเจน) | ⭐ ข้อสรุปสำคัญ: F2 ช่วย M5 ได้มาก (PF 1.065 -> 1.286) แต่ช่วย M30 ได้น้อย — แปลว่า edge ของ ribbon+BB อยู่ที่ TF เล็กเป็นหลัก (จับการแกว่งระยะสั้น) ไม่ใช่ M30 ที่สเปกต้นฉบับใช้ ซึ่งน่าสนใจ เพราะบอทต้นทางรันบน M30 — ความต่างน่าจะมาจาก exit logic (บอทเดิมกำไรจาก trailing ล้วน TP ไม่เคย ทำงานจริง แต่ engine นี้ TP เป็น hard exit เสมอ ดู docstring ใน strategies/midas.py) | ⚠️ M30 ยังไม่กำไร ห้ามเอาไป live — ถ้าจะใช้ MIDAS ให้ดู M5 (configs/midas_M5.json) แทน",
   "allowed_regimes": null,
   "blocked_hours": null,
   "risk": {
