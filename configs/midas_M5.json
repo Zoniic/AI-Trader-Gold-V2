@@ -19,13 +19,13 @@
   "trade_management": {
     "partial_tp_r": null,
     "partial_fraction": 0.5,
-    "move_sl_to_breakeven": true,
-    "trailing_stop_r": 1.5,
+    "move_sl_to_breakeven": false,
+    "trailing_stop_r": 1.0,
     "trailing_activate_r": 1.0,
     "remove_tp_when_trailing": true,
     "cooldown_bars_after_loss": 0
   },
-  "notes": "GOLD M5 (9 เดือน 2025-10 ถึง 2026-07, 53,305 แท่ง — broker จำกัดดึง M5 ครั้งละ ~53k แท่ง) | ⭐ รอบสำคัญ: implement F2 Regime Gate ที่สเปกของ MIDAS เองออกแบบไว้ตั้งแต่ต้นแต่รอบแรกลืมทำ (gold-bot-v2-architecture-workflow.md §1 ระบุชัด: 'F2: Regime Gate — ADX / ATR expansion → allow / block') — ทำเป็นกรรมการในทีม MIDAS เอง คำนวณ ADX/ATR จาก ctx ของตัวเอง ไม่ได้ใช้ allowed_regimes ของ engine กลางที่ทีมอื่นใช้ร่วมกัน จึงยังคง 'ใช้กฎของตัวเองเท่านั้น' ตามคำสั่ง | ผลก่อน F2: PF 1.065 WR 53.8% 160 ไม้ DD -17.5% | ผลหลัง F2 (block ADX>=25): PF 1.286 WR 57.9% 107 ไม้ DD -10.1% (+14.3% ใน 9 เดือน) — ดีขึ้นทุกมิติพร้อมกัน | เหตุผลที่ได้ผล: breakdown regime ก่อนหน้าชี้ว่า trend regime คือตัวถ่วงเดียว (PF 0.27, -1,855 จาก 33 ไม้) ขณะที่ volatile PF 2.96 / low_vol 1.19 / range 1.01 — ribbon+BB เป็นท่าจับการกลับตัว/ทะลุกรอบระยะสั้น ไม่ใช่ท่าตามเทรนด์ยาว (ตรงกับสเปก §3.2 ที่ว่า Engine B เข้าตอน signal เป็นกลาง) | จูน ADX threshold: 20 -> PF 1.181 / 25 -> PF 1.286 (ดีสุด ใช้ค่านี้) | ⚠️ ข้อจำกัดที่ยังเหลือ: ตัวอย่างแค่ 9 เดือน (M30 มี 3.5 ปี เทียบกันตรงๆ ไม่ได้), ยังไม่มี kill-switch/daily-weekly cap ใดๆ ตามคำสั่ง (DD -10% เกิดขึ้นเองไม่มีอะไรเบรก), ยังไม่ผ่าน walk-forward/holdout — ห้ามเอาไป live จนกว่าจะผ่านสองอย่างนั้นก่อน",
+  "notes": "GOLD M5 (9 เดือน 2025-10 ถึง 2026-07, 53,305 แท่ง) | ทีมใช้กฎของตัวเองเท่านั้นตามคำสั่งผู้ใช้ (ไม่มี kill-switch/daily-weekly cap/regime filter ของ engine กลาง) | วิวัฒนาการ: PF 1.065 (ยังไม่มี F2) -> 1.286 (ใส่ F2 Regime Gate ตามสถาปัตยกรรมของ MIDAS เอง) -> 1.314 (Option A: ลบ TP ใช้ trailing ล้วน ตามที่ log จริงของบอทต้นทางชี้) | ปัจจุบัน: PF 1.314 WR 58.9% 107 ไม้ DD -10.1% | เหตุผลของ Option A มาจากการแกะ log จริง 242 ไม้ (docs/gold_bot_2026_log_findings.md): บอทต้นทางตั้ง TP ไว้แค่ 6.9% ของไม้ และในนั้นถึงเป้าจริงแค่ 4/13 — 95% ของไม้เป็น trailing runner ไม่มี TP เลย จึงเปลี่ยนมาใช้ trailing ล้วน (remove_tp_when_trailing=True) ตรงกับพฤติกรรมจริง | ทดสอบ trailing: (1.0R/activate 0.5R) PF 1.370 แต่ DD -14.6% / (1.5R/1.0R) PF 1.286 DD -10.1% / (1.0R/1.0R) PF 1.314 DD -10.1% <- เลือกอันนี้ เพราะดีกว่า baseline ทั้ง PF และ DD และทีมนี้ไม่มี kill-switch เหลืออยู่เลย จึงเลือกฝั่ง DD ต่ำ | ยังห้าม live: ตัวอย่างแค่ 9 เดือน, ไม่มีเพดานความเสี่ยงระดับ account, ยังไม่ผ่าน walk-forward/holdout",
   "allowed_regimes": null,
   "blocked_hours": null,
   "risk": {
