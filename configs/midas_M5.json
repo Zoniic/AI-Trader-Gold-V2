@@ -1,0 +1,38 @@
+{
+  "strategy_params": {
+    "ema_fast": 20,
+    "ema_mid1": 50,
+    "ema_mid2": 100,
+    "ema_slow": 200,
+    "bb_period": 20,
+    "bb_std": 2.0,
+    "width_lookback": 100,
+    "squeeze_percentile": 25.0,
+    "swing_lookback": 20,
+    "swing_left": 3,
+    "swing_right": 3,
+    "sl_buffer_atr": 0.2,
+    "atr_period": 14,
+    "min_target_rr": 1.0
+  },
+  "trade_management": {
+    "partial_tp_r": null,
+    "partial_fraction": 0.5,
+    "move_sl_to_breakeven": true,
+    "trailing_stop_r": 1.5,
+    "trailing_activate_r": 1.0,
+    "remove_tp_when_trailing": true,
+    "cooldown_bars_after_loss": 0
+  },
+  "notes": "รัน config เดียวกับ M30 (กฎของตัวเองล้วนๆ ไม่มี kill-switch/regime filter/daily-weekly cap ตามคำสั่งผู้ใช้) บนข้อมูล M5 จริง (9 เดือนล่าสุด, 53,305 แท่ง — broker จำกัดดึง M5 ได้ครั้งละ ~53k แท่ง จึงมีแค่ช่วง 2025-10 ถึง 2026-07 ไม่ใช่ 3.5 ปีแบบ M30 — ผลจึงเทียบกันตรงๆ ไม่ได้ สเกลข้อมูลต่างกันมาก) | ผล: PF 1.065 WR 53.75% 160 ไม้ (+5.0% ใน 9 เดือน) — กำไรเล็กน้อย ไม่มี kill-switch หยุดเลย (DD เกิดขึ้นเอง -17.5% ไม่มีอะไรเบรก เหมือน M30) | breakdown ตาม regime ชี้ปัญหาเดิมชัดกว่าเดิม: volatile PF 2.96 (ดีมาก) / low_volatility PF 1.19 / range PF 1.01 แต่ trend PF 0.27 (-1855, 33 ไม้) ลากผลรวมลงหนัก — ถ้ามี regime filter (ที่ปิดไปตามคำสั่ง) จะกำไรดีขึ้นชัดเจน แต่ผู้ใช้สั่งให้ MIDAS ใช้กฎของตัวเองเท่านั้น จึงไม่เติมกลับ ⚠️ ตัวอย่างข้อมูลเล็ก (9 เดือน) และไม่มี kill-switch เหมือนเดิม — ห้ามเอาไป live จนกว่าจะมีข้อมูลยาวกว่านี้มายืนยัน",
+  "allowed_regimes": null,
+  "blocked_hours": null,
+  "risk": {
+    "risk_per_trade_pct": 1.0,
+    "max_daily_loss_pct": null,
+    "max_weekly_loss_pct": null,
+    "max_drawdown_pct": 100.0,
+    "disable_dd_halt": true,
+    "sizing_mode": "fixed"
+  }
+}
